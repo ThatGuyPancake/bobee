@@ -46,6 +46,7 @@
     },
     "nsis": {
       "oneClick": true,
+      "include": "build/installer.nsh",
       "artifactName": "Bobee Setup.exe"
     },
     "npmRebuild": false

@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, protocol, screen, Tray } = require('electron');
 const { presenceFrom } = require('./lib/presence');
+const { resolveSafePath } = require('./lib/appPath');
 
 const SIZE = 200;
 const ALLOWED_TOP = new Set(['renderer', 'assets', 'messages.json']);
@@ -76,25 +77,6 @@ function dropToFloor() {
   const wa = workArea();
   const b = win.getBounds();
   setBoundsClamped(fx, wa.y + wa.height - b.height, b.width, b.height);
-}
-
-function resolveAppPath(urlStr) {
-  const url = new URL(urlStr);
-  if (url.host !== 'app') return null;
-  let rel;
-  try {
-    rel = decodeURIComponent(url.pathname);
-  } catch {
-    return null;
-  }
-  if (rel.includes('\0')) return null;
-  const full = path.resolve(__dirname, '.' + path.sep + rel.replace(/^(?:\/|\\)+/, ''));
-  const r = path.relative(__dirname, full);
-  if (!r || r.startsWith('..') || path.isAbsolute(r)) return null;
-  const parts = r.split(path.sep);
-  if (parts.some((p) => p.includes(':'))) return null;
-  if (!ALLOWED_TOP.has(parts[0].toLowerCase())) return null;
-  return full;
 }
 
 function createWindow() {
@@ -227,8 +209,12 @@ function buildTrayMenu() {
     {
       label: 'Start with Windows',
       type: 'checkbox',
-      checked: app.getLoginItemSettings().openAtLogin,
-      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
+      checked: app.isPackaged && app.getLoginItemSettings().openAtLogin,
+      enabled: app.isPackaged,
+      click: (item) => {
+        if (!app.isPackaged) return;
+        app.setLoginItemSettings({ openAtLogin: item.checked });
+      },
     },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
@@ -243,7 +229,7 @@ function createTray() {
 
 if (gotLock) app.whenReady().then(() => {
   protocol.handle('bobee', async (request) => {
-    const file = resolveAppPath(request.url);
+    const file = await resolveSafePath(request.url, __dirname, ALLOWED_TOP);
     if (!file) return new Response('Not found', { status: 404 });
     // fs (not net.fetch) so reads work inside app.asar when packaged.
     try {

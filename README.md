@@ -48,9 +48,9 @@ Optional `assets/bobee/sprites.json` sets frames per second per animation. Anyth
 ```
 
 - `random`: said every so often on their own.
-- `click`: said when you click Bobee. If `click` is missing or empty, `random` is used.
+- `click`: said when you click Bobee. If `click` is missing or invalid, the `random` list is used for clicks too.
 
-Each list must be a non-empty array of non-empty strings, otherwise the built-in defaults are used (same for invalid JSON). Emoji are welcome. Rebuild with `npm run dist` to ship changes.
+If both lists are invalid, or the JSON itself is invalid, the built-in defaults are used. Emoji are welcome. Rebuild with `npm run dist` to ship changes.
 
 ## Uninstalling
 
