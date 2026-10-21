@@ -2,14 +2,18 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' bobee:; img-src 'self' bobee: data:; style-src 'self' 'unsafe-inline'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:" />
     <title>Bobee</title>
-    <style>
-      html, body { margin: 0; background: transparent; overflow: hidden; }
-      #stub { position: absolute; left: 68px; bottom: 0; width: 64px; height: 64px; background: red; }
-    </style>
+    <link rel="stylesheet" href="/renderer/style.css" />
   </head>
   <body>
-    <div id="stub"></div>
+    <div id="stage">
+      <div id="bubble" hidden></div>
+      <div id="sprite-wrap">
+        <div id="zzz" hidden>z</div>
+        <canvas id="bobee" width="192" height="192"></canvas>
+      </div>
+    </div>
+    <script type="module" src="/renderer/app.js"></script>
   </body>
 </html>

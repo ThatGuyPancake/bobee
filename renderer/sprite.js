@@ -30,7 +30,7 @@ export class SpritePlayer {
     this.canvas = canvas;
     this.scale = scale;
     this.baseUrl = baseUrl;
-    this.ctx = canvas.getContext('2d');
+    this.ctx = canvas.getContext('2d', { willReadFrequently: true });
     this.ctx.imageSmoothingEnabled = false;
     canvas.width = FRAME * scale;
     canvas.height = FRAME * scale;
