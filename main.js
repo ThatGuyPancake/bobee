@@ -192,7 +192,8 @@ function trayIcon() {
   const file = fs.existsSync(custom) ? custom : path.join(__dirname, 'assets', 'placeholder', 'idle.png');
   const img = nativeImage.createFromPath(file);
   if (img.isEmpty()) return img;
-  return img.crop({ x: 0, y: 0, width: 64, height: 64 }).resize({ width: 32, height: 32 });
+  const size = img.getSize().height; // frames are square
+  return img.crop({ x: 0, y: 0, width: size, height: size }).resize({ width: 32, height: 32 });
 }
 
 function buildTrayMenu() {

@@ -1,14 +1,23 @@
 export const FRAME = 64;
+// Canvas size in px. Frames are square and scaled to fit it, so 64px art
+// draws at 3x and 96px art at 2x: same size on screen.
+export const CANVAS = 192;
 
 const NAMES = ['idle', 'walk', 'sleep', 'drag', 'happy'];
 const DEFAULT_FPS = { idle: 2, walk: 8, sleep: 2, drag: 1, happy: 4 };
 const OVERRIDE_FPS = 6;
 
-export function stripInfo(width) {
-  if (width > 0 && width % FRAME === 0) {
-    return { count: width / FRAME, frameWidth: FRAME };
+// Frames are square: the strip's height is the frame size.
+export function stripInfo(width, height = FRAME) {
+  const size = height > 0 ? height : FRAME;
+  if (width > 0 && width % size === 0) {
+    return { count: width / size, frameWidth: size, frameHeight: size };
   }
-  return { count: 1, frameWidth: width > 0 ? width : FRAME };
+  return { count: 1, frameWidth: width > 0 ? width : size, frameHeight: size };
+}
+
+function infoOf(img) {
+  return stripInfo(img.naturalWidth || img.width, img.naturalHeight || img.height);
 }
 
 export function frameIndex(elapsedMs, fps, count) {
@@ -26,14 +35,13 @@ function loadImage(url) {
 }
 
 export class SpritePlayer {
-  constructor(canvas, { scale = 3, baseUrl = '/assets' } = {}) {
+  constructor(canvas, { baseUrl = '/assets' } = {}) {
     this.canvas = canvas;
-    this.scale = scale;
     this.baseUrl = baseUrl;
     this.ctx = canvas.getContext('2d', { willReadFrequently: true });
     this.ctx.imageSmoothingEnabled = false;
-    canvas.width = FRAME * scale;
-    canvas.height = FRAME * scale;
+    canvas.width = CANVAS;
+    canvas.height = CANVAS;
     this.strips = {};
     this.current = 'idle';
     this.startMs = null;
@@ -47,11 +55,12 @@ export class SpritePlayer {
         (await loadImage(`${this.baseUrl}/bobee/${name}.png`)) ||
         (await loadImage(`${this.baseUrl}/placeholder/${name}.png`));
       if (!img) continue;
-      const { count, frameWidth } = stripInfo(img.naturalWidth || img.width);
+      const { count, frameWidth, frameHeight } = infoOf(img);
       this.strips[name] = {
         img,
         count,
         frameWidth,
+        frameHeight,
         fps: fpsOverrides[name] ?? DEFAULT_FPS[name],
       };
     }
@@ -68,11 +77,12 @@ export class SpritePlayer {
   }
 
   playOverride(img, { durationMs }) {
-    const { count, frameWidth } = stripInfo(img.naturalWidth || img.width);
+    const { count, frameWidth, frameHeight } = infoOf(img);
     this.override = {
       img,
       count,
       frameWidth,
+      frameHeight,
       durationMs,
       startMs: null,
     };
@@ -113,10 +123,9 @@ export class SpritePlayer {
     }
 
     const idx = frameIndex(elapsed, fps, strip.count);
-    const dw = strip.frameWidth * this.scale;
-    const dh = strip.img.naturalHeight
-      ? strip.img.naturalHeight * this.scale
-      : h;
+    const scale = Math.max(1, Math.floor(h / strip.frameHeight));
+    const dw = strip.frameWidth * scale;
+    const dh = strip.frameHeight * scale;
     const dy = h - dh;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
@@ -130,7 +139,7 @@ export class SpritePlayer {
       idx * strip.frameWidth,
       0,
       strip.frameWidth,
-      strip.img.naturalHeight || FRAME,
+      strip.frameHeight,
       dx,
       dy,
       dw,

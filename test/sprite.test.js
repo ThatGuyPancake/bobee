@@ -4,14 +4,19 @@ import { FRAME, stripInfo, frameIndex } from '../renderer/sprite.js';
 describe('stripInfo', () => {
   it('splits a strip into square frames', () => {
     expect(FRAME).toBe(64);
-    expect(stripInfo(256)).toEqual({ count: 4, frameWidth: 64 });
-    expect(stripInfo(64)).toEqual({ count: 1, frameWidth: 64 });
+    expect(stripInfo(256)).toEqual({ count: 4, frameWidth: 64, frameHeight: 64 });
+    expect(stripInfo(64)).toEqual({ count: 1, frameWidth: 64, frameHeight: 64 });
+  });
+  it('uses the strip height as the frame size', () => {
+    expect(stripInfo(384, 96)).toEqual({ count: 4, frameWidth: 96, frameHeight: 96 });
+    expect(stripInfo(96, 96)).toEqual({ count: 1, frameWidth: 96, frameHeight: 96 });
   });
   it('treats non-multiples as a single frame', () => {
-    expect(stripInfo(100)).toEqual({ count: 1, frameWidth: 100 });
+    expect(stripInfo(100)).toEqual({ count: 1, frameWidth: 100, frameHeight: 64 });
   });
-  it('handles zero width', () => {
-    expect(stripInfo(0)).toEqual({ count: 1, frameWidth: 64 });
+  it('handles zero width or height', () => {
+    expect(stripInfo(0)).toEqual({ count: 1, frameWidth: 64, frameHeight: 64 });
+    expect(stripInfo(128, 0)).toEqual({ count: 2, frameWidth: 64, frameHeight: 64 });
   });
 });
 
