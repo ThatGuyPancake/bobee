@@ -1,4 +1,5 @@
 const WALK_SPEED = 40; // px/s
+const EXIT_SPEED = 60; // px/s, a bit quicker when heading off screen
 const IDLE_MIN = 3000;
 const IDLE_MAX = 8000;
 const WALK_CHANCE = 0.7;
@@ -11,18 +12,22 @@ const ONFIRE_STREAK = 300;
 const ONFIRE_COOLDOWN_MS = 30 * 60 * 1000;
 const RANDOM_MIN_MS = 20 * 60 * 1000;
 const RANDOM_MAX_MS = 40 * 60 * 1000;
-// Visits: Bobee is usually off screen and pops in for short visits. Each
-// visit lasts at most VISIT_MAX_MS, and he is visible at most
-// VISIT_BUDGET_MS per hour of active screen time. While the screen is idle
-// (sleep) or paused he is always shown, and that time does not count.
+// Visits: Bobee is usually off screen. Each hour of active screen time is
+// split into VISITS_PER_HOUR equal slots with one visit at a random time in
+// each, so visits are spread across the hour. Visits last VISIT_MIN_MS to
+// VISIT_MAX_MS (walking on and off included) and add up to at most
+// VISIT_BUDGET_MS per hour. While the screen is idle (sleep) or paused he is
+// always shown, and that time does not count.
 const HOUR_MS = 60 * 60 * 1000;
+const VISITS_PER_HOUR = 3;
 const VISIT_BUDGET_MS = 5 * 60 * 1000;
 const VISIT_MIN_MS = 60 * 1000;
-const VISIT_MAX_MS = 5 * 60 * 1000;
-const VISIT_GAP_MIN_MS = 10 * 60 * 1000;
-const VISIT_GAP_MAX_MS = 40 * 60 * 1000;
-const WAKE_GRACE_MS = 5 * 1000; // after waking up, he lingers this long, then leaves
+const VISIT_MAX_MS = 100 * 1000;
+const WAKE_GRACE_MS = 5 * 1000; // after a nap-only appearance, linger, then leave
 const SUMMON_MS = 60 * 1000; // tray "Say something" visit
+
+const MOVING = new Set(['walk', 'enter', 'exit']);
+const PASSING = new Set(['enter', 'exit']); // walking on or off screen
 
 export function createBrain({
   random = Math.random,
@@ -31,6 +36,7 @@ export function createBrain({
   x = 0,
   happyMs = 750,
   visits = true,
+  margin = 0, // how far past the bounds counts as fully off screen
 } = {}) {
   let lo = minX;
   let hi = Math.max(minX, maxX);
@@ -52,17 +58,19 @@ export function createBrain({
   let downWasSleep = false;
   const bubbles = [];
   let hourClock = 0; // active screen time into the current hour
-  let visibleUsed = 0; // visit time used in the current hour
+  let visibleUsed = 0; // visible time used in the current hour
+  let plan = []; // this hour's visits: { start, dur } in hourClock ms
+  let planIdx = 0;
   let present = true; // on screen at all
-  let onVisit = false; // present because of a visit (vs. sleep/pause/grace)
+  let onVisit = false; // present because of a visit (vs. nap/pause)
   let visitLeft = 0;
   let graceLeft = 0;
-  let nextVisitIn = 0; // active screen time until the next visit
   let pendingRandom = false; // a random bubble came due while he was away
-  let jumpTo = null; // where to reappear, reported once
+  let jumpTo = null; // where to teleport the window, reported once
 
   const rand = (a, b) => a + random() * (b - a);
   const clamp = (v) => Math.min(hi, Math.max(lo, v));
+  const clampWide = (v) => Math.min(hi + margin, Math.max(lo - margin, v));
 
   function enterIdle() {
     state = 'idle';
@@ -92,42 +100,69 @@ export function createBrain({
   function resetRandomTimer() {
     randomTimer = rand(RANDOM_MIN_MS, RANDOM_MAX_MS);
   }
-  resetRandomTimer();
-  enterIdle();
 
+  function makePlan(withHello) {
+    const slot = HOUR_MS / VISITS_PER_HOUR;
+    const out = [];
+    for (let i = 0; i < VISITS_PER_HOUR; i++) {
+      const dur = rand(VISIT_MIN_MS, VISIT_MAX_MS);
+      const start = withHello && i === 0 ? 0 : i * slot + rand(0, slot - dur);
+      out.push({ start, dur });
+    }
+    return out;
+  }
+
+  // Nearest point fully off screen.
+  function exitTarget() {
+    return px - lo <= hi - px ? lo - margin : hi + margin;
+  }
+
+  function exitMs() {
+    return (Math.abs(exitTarget() - px) / EXIT_SPEED) * 1000;
+  }
+
+  // Start walking off screen.
   function leave() {
+    target = exitTarget();
+    facing = target > px ? 'right' : 'left';
+    state = 'exit';
+  }
+
+  function gone() {
     present = false;
     onVisit = false;
     state = 'away';
-    nextVisitIn = rand(VISIT_GAP_MIN_MS, VISIT_GAP_MAX_MS);
   }
 
-  // Reappear at a random spot. visitMs > 0 starts a counted visit.
-  function appear(visitMs) {
-    jumpTo = clamp(lo + random() * (hi - lo));
-    px = jumpTo;
-    target = px;
+  // Walk on from a random edge to a random spot.
+  function walkIn(visitMs) {
+    const fromLeft = random() < 0.5;
+    px = fromLeft ? lo - margin : hi + margin;
+    jumpTo = px;
+    target = clamp(lo + random() * (hi - lo));
+    facing = target > px ? 'right' : 'left';
     present = true;
     onVisit = visitMs > 0;
     visitLeft = visitMs;
     graceLeft = 0;
+    state = 'enter';
+  }
+
+  // Appear in place right away (nobody is watching: nap or pause).
+  function popIn() {
+    jumpTo = clamp(lo + random() * (hi - lo));
+    px = jumpTo;
+    target = px;
+    present = true;
+    onVisit = false;
+    graceLeft = 0;
     enterIdle();
   }
 
-  function startVisit() {
+  function startVisit(dur) {
     const left = VISIT_BUDGET_MS - visibleUsed;
-    if (left < VISIT_MIN_MS) {
-      // budget spent: try again early in the next hour
-      nextVisitIn = HOUR_MS - hourClock + rand(0, VISIT_GAP_MIN_MS);
-      return;
-    }
-    appear(Math.min(rand(VISIT_MIN_MS, VISIT_MAX_MS), left));
-  }
-
-  // He starts with a hello visit, so she sees him when the app launches.
-  if (visits) {
-    onVisit = true;
-    visitLeft = Math.min(rand(VISIT_MIN_MS, VISIT_MAX_MS), VISIT_BUDGET_MS);
+    if (left < VISIT_MIN_MS) return;
+    walkIn(Math.min(dur, left));
   }
 
   function center() {
@@ -140,7 +175,46 @@ export function createBrain({
 
   function animationFor() {
     if (state === 'typing') return clock < typingHappyUntil ? 'happy' : 'idle';
+    if (PASSING.has(state)) return 'walk';
     return state;
+  }
+
+  resetRandomTimer();
+  enterIdle();
+  if (visits) {
+    // Starts off screen; the first planned visit (a hello) begins right away.
+    present = false;
+    state = 'away';
+    plan = makePlan(true);
+  }
+
+  function tickVisits(dt, screenIdle) {
+    if (screenIdle) {
+      // always show him while the screen is idle, in place, to nap
+      if (!present || PASSING.has(state)) popIn();
+      return;
+    }
+    if (present && state !== 'sleep') visibleUsed += dt;
+
+    const due = planIdx < plan.length && hourClock >= plan[planIdx].start;
+    if (!present) {
+      if (due) startVisit(plan[planIdx++].dur);
+      return;
+    }
+    if (state === 'sleep' || state === 'exit' || state === 'drag') return;
+    if (onVisit) {
+      if (due) planIdx++; // already here; skip that slot
+      visitLeft -= dt;
+      if (state !== 'enter' && visitLeft <= exitMs()) leave();
+    } else if (due) {
+      // a visit is due while he's lingering after a nap: make it a visit
+      onVisit = true;
+      visitLeft = Math.min(plan[planIdx++].dur, Math.max(0, VISIT_BUDGET_MS - visibleUsed));
+    } else {
+      if (graceLeft <= 0) graceLeft = WAKE_GRACE_MS;
+      graceLeft -= dt;
+      if (graceLeft <= 0) leave();
+    }
   }
 
   return {
@@ -153,7 +227,7 @@ export function createBrain({
         // stays until pointerUp
       } else if (paused) {
         // paused: always shown, frozen, not counted
-        if (!present) appear(0);
+        if (visits && (!present || PASSING.has(state))) popIn();
         else if (state !== 'idle') enterIdle();
       } else {
         const screenIdle = systemIdle >= SLEEP_IDLE_S;
@@ -162,31 +236,16 @@ export function createBrain({
           if (hourClock >= HOUR_MS) {
             hourClock -= HOUR_MS;
             visibleUsed = 0;
+            plan = makePlan(false);
+            planIdx = 0;
           }
         }
 
-        if (visits) {
-          if (screenIdle) {
-            if (!present) appear(0); // always show him while the screen is idle
-          } else if (present && state !== 'sleep') {
-            if (onVisit) {
-              visibleUsed += dt;
-              visitLeft -= dt;
-              if (visitLeft <= 0) leave();
-            } else {
-              if (graceLeft <= 0) graceLeft = WAKE_GRACE_MS;
-              graceLeft -= dt;
-              if (graceLeft <= 0) leave();
-            }
-          } else if (!present) {
-            nextVisitIn -= dt;
-            if (nextVisitIn <= 0) startVisit();
-          }
-        }
+        if (visits) tickVisits(dt, screenIdle);
 
         if (state === 'sleep') {
           if (!screenIdle) enterIdle();
-        } else if (screenIdle) {
+        } else if (screenIdle && state !== 'away') {
           state = 'sleep';
         }
 
@@ -205,17 +264,22 @@ export function createBrain({
             pulses = 0;
             enterIdle();
           }
-        } else if (state === 'walk') {
-          target = clamp(target);
+        } else if (MOVING.has(state)) {
+          if (state === 'walk') target = clamp(target);
           const dist = target - px;
-          const step = Math.min(WALK_SPEED * dt / 1000, Math.abs(dist));
-          if (hi - lo < 1 || Math.abs(dist) < 1e-9) {
-            enterIdle();
+          const speed = state === 'exit' ? EXIT_SPEED : WALK_SPEED;
+          const step = Math.min((speed * dt) / 1000, Math.abs(dist));
+          if (Math.abs(dist) < 1e-9 || (state === 'walk' && hi - lo < 1)) {
+            if (state === 'exit') gone();
+            else enterIdle();
           } else {
             dx = Math.sign(dist) * step;
             px += dx;
             facing = dist > 0 ? 'right' : 'left';
-            if (Math.abs(target - px) < 1e-9) enterIdle();
+            if (Math.abs(target - px) < 1e-9) {
+              if (state === 'exit') gone();
+              else enterIdle();
+            }
           }
         }
 
@@ -226,8 +290,8 @@ export function createBrain({
             resetRandomTimer();
           }
         }
-        // only talk while he's on screen and awake
-        if (pendingRandom && present && state !== 'sleep') {
+        // only talk while he's on screen, awake, and not leaving
+        if (pendingRandom && present && state !== 'sleep' && state !== 'exit') {
           pendingRandom = false;
           bubbles.push('random');
         }
@@ -240,6 +304,7 @@ export function createBrain({
         animation: animationFor(),
         facing,
         dx,
+        x: px, // where Bobee is; may be past the bounds while walking on/off
         visible: present,
         jumpTo: jump,
         bubble: bubbles.length ? bubbles.shift() : null,
@@ -248,7 +313,7 @@ export function createBrain({
 
     keyPulse() {
       if (paused || state === 'drag') return;
-      if (state === 'away') {
+      if (!present || PASSING.has(state)) {
         wake();
         return;
       }
@@ -304,13 +369,21 @@ export function createBrain({
       return 'click';
     },
 
-    setSystemIdle(seconds) {
-      systemIdle = seconds;
+    // Tray "Say something": bring him over for a short visit if he's away
+    // or on his way out.
+    summon() {
+      if (!present) walkIn(SUMMON_MS);
+      else if (state === 'exit') {
+        onVisit = true;
+        visitLeft = SUMMON_MS;
+        target = clamp(lo + random() * (hi - lo));
+        facing = target > px ? 'right' : 'left';
+        state = 'enter';
+      }
     },
 
-    // Tray "Say something": bring him over for a short visit if he's away.
-    summon() {
-      if (!present) appear(SUMMON_MS);
+    setSystemIdle(seconds) {
+      systemIdle = seconds;
     },
 
     setPaused(p) {
@@ -321,12 +394,17 @@ export function createBrain({
     setBounds(a, b) {
       lo = a;
       hi = Math.max(a, b);
-      px = clamp(px);
-      target = clamp(target);
+      if (state === 'exit') target = exitTarget();
+      else if (state === 'enter') target = clamp(target);
+      if (PASSING.has(state) || state === 'away') px = clampWide(px);
+      else {
+        px = clamp(px);
+        target = clamp(target);
+      }
     },
 
     setX(v) {
-      px = clamp(v);
+      px = clampWide(v);
     },
   };
 }

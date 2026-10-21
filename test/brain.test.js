@@ -50,7 +50,7 @@ describe('brain', () => {
   });
 
   it('zero-width bounds produce no NaN dx', () => {
-    const b = createBrain({ random: () => 0.1, minX: 500, maxX: 500, x: 500 });
+    const b = createBrain({ random: () => 0.1, minX: 500, maxX: 500, x: 500, visits: false });
     for (const o of run(b, 30000)) {
       expect(Number.isNaN(o.dx)).toBe(false);
       expect(o.dx).toBe(0);
@@ -58,7 +58,7 @@ describe('brain', () => {
   });
 
   it('setBounds shrinking mid-walk clamps target', () => {
-    const b = createBrain({ random: () => 0.1, minX: 0, maxX: 1000, x: 100 });
+    const b = createBrain({ random: () => 0.1, minX: 0, maxX: 1000, x: 100, visits: false });
     let x = 100;
     let sawWalk = false;
     for (let i = 0; i < 100 && !sawWalk; i++) {
@@ -285,7 +285,7 @@ describe('brain: visits', () => {
     b.setSystemIdle(200);
     b.tick(1000);
     b.setSystemIdle(0);
-    const out = run(b, 10 * 1000, 1000);
+    const out = run(b, 30 * 1000, 1000);
     expect(out[0].visible).toBe(true);
     expect(out[out.length - 1].visible).toBe(false);
   });
@@ -314,6 +314,41 @@ describe('brain: visits', () => {
     o = c.tick(100);
     expect(o.visible).toBe(true);
     expect(o.jumpTo).not.toBeNull();
+  });
+
+  it('visits are spread out: one in each third of every hour', () => {
+    const b = mkV({ random: seeded(9) });
+    const out = run(b, 6 * 60 * MIN, 1000);
+    for (let h = 1; h < 6; h++) {
+      for (let t = 0; t < 3; t++) {
+        const from = h * 3600 + t * 1200;
+        expect(out.slice(from, from + 1200).some(visibleAwake)).toBe(true);
+      }
+    }
+  });
+
+  it('walks on from off screen and walks off screen when leaving', () => {
+    const b = mkV({ minX: 0, maxX: 1000, margin: 200 });
+    const first = b.tick(100);
+    expect(first.state).toBe('enter');
+    expect(first.animation).toBe('walk');
+    expect([-200, 1200]).toContain(first.jumpTo);
+    let x = first.jumpTo + first.dx;
+    let sawExit = false;
+    let o;
+    for (let i = 0; i < 400; i++) {
+      o = b.tick(1000);
+      x += o.dx;
+      if (o.state === 'exit') {
+        sawExit = true;
+        expect(o.animation).toBe('walk');
+        expect(o.visible).toBe(true);
+      }
+      if (!o.visible) break;
+    }
+    expect(sawExit).toBe(true);
+    expect(o.visible).toBe(false);
+    expect(x <= -200 + 1e-6 || x >= 1200 - 1e-6).toBe(true);
   });
 
   it('never shows a random bubble while away', () => {

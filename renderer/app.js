@@ -37,18 +37,32 @@ async function main() {
   const bubble = createBubble(bubbleEl, { onResize: (h) => window.bobee.setHeight(h) });
 
   const b0 = await window.bobee.getBounds();
-  let x = b0.x;
+  let x = b0.x; // window x
+  let bounds = { minX: b0.minX, maxX: b0.maxX };
   const brain = createBrain({
     minX: b0.minX,
     maxX: b0.maxX,
     x: b0.x,
     happyMs: player.durationOf('happy', 2) || 750,
+    // fully off screen once he has slid out of a window parked at the edge
+    margin: (b0.width + canvas.offsetWidth) / 2,
   });
 
+  // Show a message's bubbles one after another (a joke's setup, then its
+  // punchline). A new message cancels the rest of the previous one.
+  const PART_GAP_MS = 3500;
+  let partTimers = [];
+  function say(parts) {
+    partTimers.forEach(clearTimeout);
+    partTimers = parts.map((text, i) =>
+      setTimeout(() => bubble.showMessage({ text }), i * PART_GAP_MS)
+    );
+  }
+
   function showBubble(kind) {
-    if (kind === 'click') bubble.showMessage({ text: picker.nextClick() });
-    else if (kind === 'random') bubble.showMessage({ text: picker.nextRandom() });
-    else if (kind === 'onfire') bubble.showMessage({ text: "you're on fire 🔥" });
+    if (kind === 'click') say(picker.nextClick());
+    else if (kind === 'random') say(picker.nextRandom());
+    else if (kind === 'onfire') say(["you're on fire 🔥"]);
   }
 
   window.__bobee = {
@@ -56,6 +70,7 @@ async function main() {
     playOverride: (img, opts) => player.playOverride(img, opts),
   };
 
+  let syncing = false; // true while reading the window position after a drag
   async function syncX() {
     const b = await window.bobee.getBounds();
     x = b.x;
@@ -65,6 +80,7 @@ async function main() {
   window.bobee.onKeyPulse(() => brain.keyPulse());
   window.bobee.onIdle((s) => brain.setSystemIdle(s));
   window.bobee.onBounds(async (b) => {
+    bounds = { minX: b.minX, maxX: b.maxX };
     brain.setBounds(b.minX, b.maxX);
     await syncX();
   });
@@ -73,7 +89,7 @@ async function main() {
     else if (c === 'resume') brain.setPaused(false);
     else if (c === 'say') {
       brain.summon(); // comes over for a short visit if he's away
-      bubble.showMessage({ text: picker.nextRandom() });
+      say(picker.nextRandom());
     }
   });
 
@@ -125,8 +141,10 @@ async function main() {
     const wasMoved = moved;
     moved = false;
     if (result === 'drag' || wasMoved) {
+      syncing = true;
       window.bobee.dropToFloor();
       await syncX();
+      syncing = false;
     }
   });
 
@@ -135,21 +153,20 @@ async function main() {
     const dt = Math.min(now - last, 100);
     last = now;
     const out = brain.tick(dt);
-    if (out.jumpTo != null) {
-      // reappear somewhere new (moved while still invisible)
-      window.bobee.moveBy(out.jumpTo - x, 0);
-      x = out.jumpTo;
-      brain.setX(x);
+    // The window follows Bobee but stops at the screen edge; past it, he
+    // slides out of the window, so the edge clips him as he walks off.
+    if (!pressed && !syncing) {
+      const winX = Math.min(bounds.maxX, Math.max(bounds.minX, out.x));
+      if (Math.abs(winX - x) > 0.01) {
+        window.bobee.moveBy(winX - x, 0);
+        x = winX;
+      }
+      wrap.style.transform = `translateX(${Math.round(out.x - winX)}px)`;
     }
     if (hidden !== !out.visible) {
       hidden = !out.visible;
       wrap.classList.toggle('away', hidden);
       if (hidden) setThrough(true);
-    }
-    if (out.dx !== 0) {
-      window.bobee.moveBy(out.dx, 0);
-      x += out.dx;
-      brain.setX(x);
     }
     player.play(out.animation);
     player.setFacing(out.facing);

@@ -41,10 +41,17 @@ let paused = false;
 
 const num = (...vals) => vals.every((v) => typeof v === 'number' && Number.isFinite(v));
 
+// Bobee lives on one "home" display. It only changes when she drags him to
+// another screen, so walking off an edge never moves him to the next monitor.
+let homeDisplayId = null;
+
+function homeDisplay() {
+  const all = screen.getAllDisplays();
+  return all.find((d) => d.id === homeDisplayId) || screen.getPrimaryDisplay();
+}
+
 function workArea() {
-  const b = win && !win.isDestroyed() ? win.getBounds() : null;
-  const display = b ? screen.getDisplayMatching(b) : screen.getPrimaryDisplay();
-  return display.workArea;
+  return homeDisplay().workArea;
 }
 
 function range(wa, width) {
@@ -56,6 +63,9 @@ function range(wa, width) {
 function setBoundsClamped(x, y, width, height) {
   const wa = workArea();
   const { minX, maxX } = range(wa, width);
+  // The window never leaves the screen: moving a window past the edge makes
+  // Windows rescale it for a neighbouring monitor. Bobee walks off screen
+  // by sliding out of the window instead (see app.js).
   fx = Math.min(maxX, Math.max(minX, x));
   win.setBounds({
     x: Math.round(fx),
@@ -82,7 +92,8 @@ function dropToFloor() {
 }
 
 function createWindow() {
-  const wa = screen.getPrimaryDisplay().workArea;
+  homeDisplayId = screen.getPrimaryDisplay().id;
+  const wa = workArea();
   win = new BrowserWindow({
     width: SIZE,
     height: SIZE,
@@ -126,7 +137,10 @@ function registerIpc() {
     setBoundsClamped(x, y, b.width, b.height);
   });
   ipcMain.on('drop-to-floor', (e) => {
-    if (trusted(e)) dropToFloor();
+    if (!trusted(e)) return;
+    // sent after a drag: the screen he was dropped on becomes home
+    homeDisplayId = screen.getDisplayMatching(win.getBounds()).id;
+    dropToFloor();
   });
   ipcMain.on('set-height', (e, h) => {
     if (!trusted(e) || !num(h)) return;

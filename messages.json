@@ -1,14 +1,42 @@
 {
-  "random": [
-    "drink some water 💧",
-    "I'm proud of you",
-    "you're doing great ✨",
-    "take a deep breath 🌿",
-    "you've got this 💛"
+  "sweet": [
+    "You are the cutest 🥰",
+    "I love you ❤️",
+    "You're so productive ✨",
+    "Send me a picture with you 📸",
+    "You better stay hydrated 💧",
+    "Did you check on grizz? 🐻"
+  ],
+  "jokes": [
+    ["Why did the chicken cross the road?", "To get to the other side! 🐔"],
+    ["Why don't bears wear shoes?", "They'd still have bear feet 🐾"],
+    ["What do you call a bear with no teeth?", "A gummy bear! 🐻"],
+    ["Why did the coffee call the police?", "It got mugged ☕"],
+    ["What do you call a sleeping dinosaur?", "A dino-snore 🦕💤"],
+    ["Why don't eggs tell jokes?", "They'd crack each other up 🥚"],
+    ["What do you call cheese that isn't yours?", "Nacho cheese 🧀"],
+    ["Why did the scarecrow win an award?", "He was outstanding in his field 🌾"],
+    ["What's a bear's favorite pasta?", "Tagliatelly bear 🍝"],
+    ["Why are frogs so happy?", "They eat whatever bugs them 🐸"]
+  ],
+  "facts": [
+    "Sea otters hold hands while they sleep 🦦",
+    "Octopuses have three hearts 🐙",
+    "Bananas are berries, but strawberries aren't 🍌",
+    "A group of flamingos is a 'flamboyance' 🦩",
+    "Wombat poop is cube-shaped 🟫",
+    "A day on Venus is longer than its year 🪐",
+    "Polar bears have black skin under white fur 🐻‍❄️",
+    "Butterflies taste with their feet 🦋",
+    "Koalas sleep up to 20 hours a day 🐨",
+    "Grizzly bears can run about 55 km/h 🐻💨",
+    "Honey found in ancient Egyptian tombs was still edible 🍯",
+    "Sea otters keep a favorite rock in a pouch under their arm 🪨"
   ],
   "click": [
-    "hehe, hi! 🐝",
+    "hehe, hi! 🐻",
     "boop!",
-    "you're the best ✨"
+    "that tickles!",
+    "coffee time? ☕"
   ]
 }

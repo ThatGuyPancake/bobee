@@ -38,19 +38,22 @@ Optional `assets/bobee/sprites.json` sets frames per second per animation. Anyth
 
 ## Editing messages
 
-`messages.json` in the project root has two lists of speech-bubble text:
+`messages.json` in the project root holds everything Bobee says:
 
 ```json
 {
-  "random": ["drink some water 💧", "you've got this 💛"],
-  "click": ["hehe, hi! 🐝", "boop!"]
+  "sweet": ["I love you ❤️", "You better stay hydrated 💧"],
+  "jokes": [["Why did the chicken cross the road?", "To get to the other side! 🐔"]],
+  "facts": ["Octopuses have three hearts 🐙"],
+  "click": ["hehe, hi! 🐻", "boop!"]
 }
 ```
 
-- `random`: said every so often on their own.
-- `click`: said when you click Bobee. If `click` is missing or invalid, the `random` list is used for clicks too.
+- `sweet`, `jokes`, `facts`: said every so often while he's visiting. Each time, a group is picked at random first, so a long list doesn't crowd out a short one.
+- `click`: said when you click Bobee. If it's missing, he picks from the other three.
+- A message in `[ ]` brackets is shown as separate bubbles a few seconds apart, which is how jokes get a setup and a punchline. A plain `"text"` is one bubble.
 
-If both lists are invalid, or the JSON itself is invalid, the built-in defaults are used. Emoji are welcome. Rebuild with `npm run dist` to ship changes.
+If the file is broken (a missing comma, say), the built-in defaults are used. Emoji are welcome. Rebuild with `npm run dist` to ship changes.
 
 ## Uninstalling
 
