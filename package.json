@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "main": "main.js",
-  "directories": {
-    "doc": "docs"
-  },
   "scripts": {
     "test": "vitest run",
     "start": "electron .",
@@ -28,5 +25,29 @@
   },
   "allowScripts": {
     "electron@45.0.0": true
+  },
+  "build": {
+    "appId": "com.bobee.companion",
+    "productName": "Bobee",
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**",
+      "renderer/**",
+      "assets/**",
+      "messages.json"
+    ],
+    "asarUnpack": [
+      "node_modules/uiohook-napi/**/*.node"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "artifactName": "Bobee Setup.exe"
+    },
+    "npmRebuild": false
   }
 }
