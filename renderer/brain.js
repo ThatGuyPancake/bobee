@@ -11,14 +11,18 @@ const ONFIRE_STREAK = 300;
 const ONFIRE_COOLDOWN_MS = 30 * 60 * 1000;
 const RANDOM_MIN_MS = 20 * 60 * 1000;
 const RANDOM_MAX_MS = 40 * 60 * 1000;
-// Away trips: Bobee wanders off screen now and then, at most
-// AWAY_BUDGET_MS per hour of screen time (time awake, not asleep or paused).
+// Visits: Bobee is usually off screen and pops in for short visits. Each
+// visit lasts at most VISIT_MAX_MS, and he is visible at most
+// VISIT_BUDGET_MS per hour of active screen time. While the screen is idle
+// (sleep) or paused he is always shown, and that time does not count.
 const HOUR_MS = 60 * 60 * 1000;
-const AWAY_BUDGET_MS = 5 * 60 * 1000;
-const AWAY_MIN_MS = 45 * 1000;
-const AWAY_MAX_MS = 3 * 60 * 1000;
-const AWAY_GAP_MIN_MS = 8 * 60 * 1000;
-const AWAY_GAP_MAX_MS = 25 * 60 * 1000;
+const VISIT_BUDGET_MS = 5 * 60 * 1000;
+const VISIT_MIN_MS = 60 * 1000;
+const VISIT_MAX_MS = 5 * 60 * 1000;
+const VISIT_GAP_MIN_MS = 10 * 60 * 1000;
+const VISIT_GAP_MAX_MS = 40 * 60 * 1000;
+const WAKE_GRACE_MS = 5 * 1000; // after waking up, he lingers this long, then leaves
+const SUMMON_MS = 60 * 1000; // tray "Say something" visit
 
 export function createBrain({
   random = Math.random,
@@ -26,6 +30,7 @@ export function createBrain({
   maxX = 0,
   x = 0,
   happyMs = 750,
+  visits = true,
 } = {}) {
   let lo = minX;
   let hi = Math.max(minX, maxX);
@@ -46,10 +51,14 @@ export function createBrain({
   let dragging = false;
   let downWasSleep = false;
   const bubbles = [];
-  let hourClock = 0; // screen time into the current hour
-  let awayUsed = 0; // away time spent in the current hour
-  let awayTimer = 0; // screen time until the next trip may start
-  let awayLeft = 0; // time left on the current trip
+  let hourClock = 0; // active screen time into the current hour
+  let visibleUsed = 0; // visit time used in the current hour
+  let present = true; // on screen at all
+  let onVisit = false; // present because of a visit (vs. sleep/pause/grace)
+  let visitLeft = 0;
+  let graceLeft = 0;
+  let nextVisitIn = 0; // active screen time until the next visit
+  let pendingRandom = false; // a random bubble came due while he was away
   let jumpTo = null; // where to reappear, reported once
 
   const rand = (a, b) => a + random() * (b - a);
@@ -85,19 +94,40 @@ export function createBrain({
   }
   resetRandomTimer();
   enterIdle();
-  awayTimer = rand(AWAY_GAP_MIN_MS, AWAY_GAP_MAX_MS);
 
-  function goAway() {
-    awayLeft = Math.min(rand(AWAY_MIN_MS, AWAY_MAX_MS), AWAY_BUDGET_MS - awayUsed);
+  function leave() {
+    present = false;
+    onVisit = false;
     state = 'away';
+    nextVisitIn = rand(VISIT_GAP_MIN_MS, VISIT_GAP_MAX_MS);
   }
 
-  function comeBack() {
+  // Reappear at a random spot. visitMs > 0 starts a counted visit.
+  function appear(visitMs) {
     jumpTo = clamp(lo + random() * (hi - lo));
     px = jumpTo;
     target = px;
-    awayTimer = rand(AWAY_GAP_MIN_MS, AWAY_GAP_MAX_MS);
+    present = true;
+    onVisit = visitMs > 0;
+    visitLeft = visitMs;
+    graceLeft = 0;
     enterIdle();
+  }
+
+  function startVisit() {
+    const left = VISIT_BUDGET_MS - visibleUsed;
+    if (left < VISIT_MIN_MS) {
+      // budget spent: try again early in the next hour
+      nextVisitIn = HOUR_MS - hourClock + rand(0, VISIT_GAP_MIN_MS);
+      return;
+    }
+    appear(Math.min(rand(VISIT_MIN_MS, VISIT_MAX_MS), left));
+  }
+
+  // He starts with a hello visit, so she sees him when the app launches.
+  if (visits) {
+    onVisit = true;
+    visitLeft = Math.min(rand(VISIT_MIN_MS, VISIT_MAX_MS), VISIT_BUDGET_MS);
   }
 
   function center() {
@@ -122,37 +152,47 @@ export function createBrain({
       if (state === 'drag') {
         // stays until pointerUp
       } else if (paused) {
-        if (state === 'away') comeBack();
+        // paused: always shown, frozen, not counted
+        if (!present) appear(0);
         else if (state !== 'idle') enterIdle();
       } else {
-        if (state !== 'sleep' && systemIdle < SLEEP_IDLE_S) {
+        const screenIdle = systemIdle >= SLEEP_IDLE_S;
+        if (!screenIdle) {
           hourClock += dt;
-          if (state !== 'away') awayTimer -= dt;
           if (hourClock >= HOUR_MS) {
             hourClock -= HOUR_MS;
-            awayUsed = 0;
+            visibleUsed = 0;
           }
         }
-        if (state === 'away') {
-          awayUsed += dt;
-          awayLeft -= dt;
-          if (systemIdle >= SLEEP_IDLE_S) {
-            comeBack();
-            state = 'sleep';
-          } else if (awayLeft <= 0) {
-            comeBack();
+
+        if (visits) {
+          if (screenIdle) {
+            if (!present) appear(0); // always show him while the screen is idle
+          } else if (present && state !== 'sleep') {
+            if (onVisit) {
+              visibleUsed += dt;
+              visitLeft -= dt;
+              if (visitLeft <= 0) leave();
+            } else {
+              if (graceLeft <= 0) graceLeft = WAKE_GRACE_MS;
+              graceLeft -= dt;
+              if (graceLeft <= 0) leave();
+            }
+          } else if (!present) {
+            nextVisitIn -= dt;
+            if (nextVisitIn <= 0) startVisit();
           }
-        } else if (state === 'sleep') {
-          if (systemIdle < SLEEP_IDLE_S) enterIdle();
-        } else if (systemIdle >= SLEEP_IDLE_S) {
+        }
+
+        if (state === 'sleep') {
+          if (!screenIdle) enterIdle();
+        } else if (screenIdle) {
           state = 'sleep';
         }
 
         if (state === 'idle') {
           stateTimer -= dt;
-          if (awayTimer <= 0 && AWAY_BUDGET_MS - awayUsed >= AWAY_MIN_MS) {
-            goAway();
-          } else if (stateTimer <= 0) {
+          if (stateTimer <= 0) {
             if (random() < WALK_CHANCE) startWalk();
             else enterIdle();
           }
@@ -179,12 +219,17 @@ export function createBrain({
           }
         }
 
-        if (state !== 'sleep' && state !== 'away') {
+        if (state !== 'sleep') {
           randomTimer -= dt;
           if (randomTimer <= 0) {
-            bubbles.push('random');
+            pendingRandom = true;
             resetRandomTimer();
           }
+        }
+        // only talk while he's on screen and awake
+        if (pendingRandom && present && state !== 'sleep') {
+          pendingRandom = false;
+          bubbles.push('random');
         }
       }
 
@@ -195,7 +240,7 @@ export function createBrain({
         animation: animationFor(),
         facing,
         dx,
-        visible: state !== 'away',
+        visible: present,
         jumpTo: jump,
         bubble: bubbles.length ? bubbles.shift() : null,
       };
@@ -261,6 +306,11 @@ export function createBrain({
 
     setSystemIdle(seconds) {
       systemIdle = seconds;
+    },
+
+    // Tray "Say something": bring him over for a short visit if he's away.
+    summon() {
+      if (!present) appear(SUMMON_MS);
     },
 
     setPaused(p) {

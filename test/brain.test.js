@@ -16,7 +16,7 @@ function run(brain, ms, step = 100) {
 }
 
 const mk = (o = {}) =>
-  createBrain({ random: () => 0.1, minX: 0, maxX: 1000, x: 500, ...o });
+  createBrain({ random: () => 0.1, minX: 0, maxX: 1000, x: 500, visits: false, ...o });
 
 describe('brain', () => {
   it('starts idle and walks after <= 8s', () => {
@@ -27,7 +27,7 @@ describe('brain', () => {
   });
 
   it('walk dx never exceeds 40px/s and stays in bounds', () => {
-    const b = createBrain({ random: seeded(7), minX: 100, maxX: 600, x: 300 });
+    const b = createBrain({ visits: false, random: seeded(7), minX: 100, maxX: 600, x: 300 });
     let x = 300;
     for (const o of run(b, 60000)) {
       expect(Math.abs(o.dx)).toBeLessThanOrEqual((40 * 100) / 1000 + 1e-9);
@@ -38,7 +38,7 @@ describe('brain', () => {
   });
 
   it('facing matches walk direction', () => {
-    const b = createBrain({ random: seeded(3), minX: 0, maxX: 800, x: 400 });
+    const b = createBrain({ visits: false, random: seeded(3), minX: 0, maxX: 800, x: 400 });
     let walked = 0;
     for (const o of run(b, 60000)) {
       if (o.state === 'walk' && o.dx !== 0) {
@@ -182,8 +182,6 @@ describe('brain', () => {
     run(b, 5000); // typing ends
     expect(burst()).toBe(0);
     run(b, 31 * 60 * 1000);
-    // typing never calls him back from a trip, so wait until he's here
-    for (let i = 0; i < 600 && b.tick(1000).state === 'away'; i++);
     expect(burst()).toBe(1);
   });
 
@@ -221,84 +219,107 @@ describe('brain', () => {
   });
 });
 
-describe('brain: away trips', () => {
+describe('brain: visits', () => {
   const MIN = 60 * 1000;
-  function untilAway(b) {
-    for (let i = 0; i < 2 * 3600; i++) {
-      const o = b.tick(1000);
-      if (o.state === 'away') return o;
-    }
-    throw new Error('never went away');
-  }
+  const mkV = (o = {}) => createBrain({ random: seeded(11), minX: 0, maxX: 1000, x: 500, ...o });
+  const visibleAwake = (o) => o.visible && o.state !== 'sleep';
 
-  it('goes away at least once in an hour of screen time, then comes back visible', () => {
-    const b = mk();
-    const out = run(b, 60 * MIN, 1000);
-    const awayIdx = out.findIndex((o) => o.state === 'away');
-    expect(awayIdx).toBeGreaterThan(-1);
-    expect(out[awayIdx].visible).toBe(false);
-    const back = out.slice(awayIdx).find((o) => o.state !== 'away');
-    expect(back.visible).toBe(true);
+  it('says hello on launch, then leaves within 5 minutes', () => {
+    const b = mkV();
+    expect(b.tick(100).visible).toBe(true);
+    const out = run(b, 5 * MIN + 2000, 1000);
+    expect(out.some((o) => !o.visible && o.state === 'away')).toBe(true);
   });
 
-  it('is never away more than 5 minutes per hour of screen time', () => {
-    const b = createBrain({ random: seeded(3), minX: 0, maxX: 1000, x: 500 });
-    const out = run(b, 5 * 60 * MIN, 1000);
-    for (let h = 0; h < 5; h++) {
+  it('no visit is ever longer than 5 minutes', () => {
+    const b = mkV();
+    let streak = 0;
+    for (const o of run(b, 6 * 60 * MIN, 1000)) {
+      streak = visibleAwake(o) ? streak + 1 : 0;
+      expect(streak).toBeLessThanOrEqual(5 * 60);
+    }
+  });
+
+  it('visible at most 5 minutes per hour of active screen time, and still visits every hour', () => {
+    const b = mkV({ random: seeded(3) });
+    const out = run(b, 6 * 60 * MIN, 1000);
+    for (let h = 0; h < 6; h++) {
       const hour = out.slice(h * 3600, (h + 1) * 3600);
-      const awaySec = hour.filter((o) => o.state === 'away').length;
-      expect(awaySec).toBeLessThanOrEqual(5 * 60);
+      expect(hour.filter(visibleAwake).length).toBeLessThanOrEqual(5 * 60);
     }
-    expect(out.some((o) => o.state === 'away')).toBe(true);
+    for (let h = 1; h < 6; h++) {
+      const two = out.slice(h * 3600 - 1800, h * 3600 + 3600);
+      expect(two.some(visibleAwake)).toBe(true);
+    }
   });
 
-  it('comes back at a random spot inside the bounds', () => {
-    const b = createBrain({ random: seeded(5), minX: 100, maxX: 900, x: 500 });
-    const out = run(b, 60 * MIN, 1000);
-    const i = out.findIndex((o) => o.state === 'away');
-    const back = out.slice(i).find((o) => o.jumpTo != null);
-    expect(back).toBeTruthy();
-    expect(back.jumpTo).toBeGreaterThanOrEqual(100);
-    expect(back.jumpTo).toBeLessThanOrEqual(900);
-    expect(back.visible).toBe(true);
-  });
-
-  it('always comes back when it is time to sleep', () => {
-    const b = mk();
-    let o = untilAway(b);
+  it('always shows him while the screen is idle, at a spot inside the bounds', () => {
+    const b = mkV({ minX: 100, maxX: 900 });
+    let o;
+    for (let i = 0; i < 600 && (o = b.tick(1000)).visible; i++);
+    expect(o.visible).toBe(false);
     b.setSystemIdle(130);
     o = b.tick(100);
+    expect(o.visible).toBe(true);
     expect(o.state).toBe('sleep');
+    expect(o.jumpTo).toBeGreaterThanOrEqual(100);
+    expect(o.jumpTo).toBeLessThanOrEqual(900);
+    // stays for hours of idle screen
+    expect(run(b, 3 * 60 * MIN, 1000).every((x) => x.visible && x.state === 'sleep')).toBe(true);
+  });
+
+  it('idle-screen time does not use up his visit time', () => {
+    const b = mkV();
+    b.setSystemIdle(500);
+    run(b, 50 * MIN, 1000); // asleep, visible, not counted
+    b.setSystemIdle(0);
+    // the launch visit still has its time left, so he stays a bit after waking
+    const out = run(b, 20 * 1000, 1000);
+    expect(out.every((o) => o.visible)).toBe(true);
+  });
+
+  it('leaves shortly after waking if he only came for the nap', () => {
+    const b = mkV();
+    let o;
+    for (let i = 0; i < 600 && (o = b.tick(1000)).visible; i++);
+    b.setSystemIdle(200);
+    b.tick(1000);
+    b.setSystemIdle(0);
+    const out = run(b, 10 * 1000, 1000);
+    expect(out[0].visible).toBe(true);
+    expect(out[out.length - 1].visible).toBe(false);
+  });
+
+  it('typing does not bring him back, and he never moves while away', () => {
+    const b = mkV();
+    let o;
+    for (let i = 0; i < 600 && (o = b.tick(1000)).visible; i++);
+    b.keyPulse();
+    o = b.tick(100);
+    expect(o.visible).toBe(false);
+    expect(o.dx).toBe(0);
+  });
+
+  it('pause shows him; summon brings him for a visit', () => {
+    const b = mkV();
+    let o;
+    for (let i = 0; i < 600 && (o = b.tick(1000)).visible; i++);
+    b.setPaused(true);
+    expect(b.tick(100).visible).toBe(true);
+    b.setPaused(false);
+
+    const c = mkV();
+    for (let i = 0; i < 600 && (o = c.tick(1000)).visible; i++);
+    c.summon();
+    o = c.tick(100);
     expect(o.visible).toBe(true);
     expect(o.jumpTo).not.toBeNull();
   });
 
-  it('typing does not bring him back early, and he never walks while away', () => {
-    const b = mk();
-    let o = untilAway(b);
-    b.keyPulse();
-    o = b.tick(100);
-    expect(o.state).toBe('away');
-    expect(o.dx).toBe(0);
-  });
-
-  it('does not leave while paused, and pausing brings him back', () => {
-    const p = mk();
-    p.setPaused(true);
-    expect(run(p, 60 * MIN, 1000).some((o) => o.state === 'away')).toBe(false);
-
-    const b = mk();
-    let o = untilAway(b);
-    b.setPaused(true);
-    o = b.tick(100);
-    expect(o.state).toBe('idle');
-    expect(o.visible).toBe(true);
-  });
-
-  it('sleeping time does not count as screen time', () => {
-    const b = mk();
-    b.setSystemIdle(500);
-    const out = run(b, 3 * 60 * MIN, 1000);
-    expect(out.every((o) => o.state === 'sleep')).toBe(true);
+  it('never shows a random bubble while away', () => {
+    const b = mkV();
+    for (const o of run(b, 3 * 60 * MIN, 1000)) {
+      if (o.bubble === 'random') expect(o.visible).toBe(true);
+    }
   });
 });

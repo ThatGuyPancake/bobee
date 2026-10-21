@@ -71,7 +71,10 @@ async function main() {
   window.bobee.onCommand((c) => {
     if (c === 'pause') brain.setPaused(true);
     else if (c === 'resume') brain.setPaused(false);
-    else if (c === 'say') bubble.showMessage({ text: picker.nextRandom() });
+    else if (c === 'say') {
+      brain.summon(); // comes over for a short visit if he's away
+      bubble.showMessage({ text: picker.nextRandom() });
+    }
   });
 
   // Pointer handling and click-through hit testing.
