@@ -154,9 +154,9 @@ describe('brain', () => {
       if (o.animation === 'happy') sawHappy = true;
     }
     expect(sawHappy).toBe(true);
-    for (const o of run(b, 1500)) if (o.animation === 'happy') sawHappy = true;
-    const after = run(b, 3100);
-    expect(after[after.length - 1].state).toBe('idle');
+    // last tick was 100 ms after the final pulse
+    expect(b.tick(2800).state).toBe('typing'); // 2900 ms
+    expect(b.tick(200).state).toBe('idle'); // 3100 ms
   });
 
   it('facing during typing points to the screen center', () => {
@@ -196,6 +196,16 @@ describe('brain', () => {
     p.setPaused(true);
     const out = run(p, 60 * 60 * 1000, 1000);
     expect(out.filter((o) => o.bubble === 'random').length).toBe(0);
+  });
+
+  it('click while paused: no bubble, no happy', () => {
+    const b = mk();
+    b.setPaused(true);
+    b.pointerDown(0, 0);
+    expect(b.pointerUp()).toBe('click');
+    const o = b.tick(100);
+    expect(o.bubble).toBe(null);
+    expect(o.state).toBe('idle');
   });
 
   it('paused: idle, dx 0, keys ignored', () => {

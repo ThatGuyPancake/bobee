@@ -194,7 +194,7 @@ export function createBrain({
         enterIdle();
         return 'drag';
       }
-      if (wasSleep || state === 'sleep') {
+      if (paused || wasSleep || state === 'sleep') {
         enterIdle();
       } else {
         state = 'happy';
@@ -210,6 +210,7 @@ export function createBrain({
 
     setPaused(p) {
       paused = !!p;
+      if (paused) bubbles.length = 0;
     },
 
     setBounds(a, b) {
