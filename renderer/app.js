@@ -16,6 +16,8 @@ async function main() {
   const canvas = document.getElementById('bobee');
   const bubbleEl = document.getElementById('bubble');
   const zzz = document.getElementById('zzz');
+  const wrap = document.getElementById('sprite-wrap');
+  let hidden = false; // true while Bobee is away on a trip
 
   const picker = createPicker(parseMessages(await fetchText('/messages.json')));
   let fps = {};
@@ -84,6 +86,7 @@ async function main() {
   };
 
   function opaqueAt(e) {
+    if (hidden) return bubble.visible() && bubbleEl.contains(e.target);
     if (bubble.visible() && bubbleEl.contains(e.target)) return true;
     const r = canvas.getBoundingClientRect();
     return player.isOpaqueAt(e.clientX - r.left, e.clientY - r.top);
@@ -129,6 +132,17 @@ async function main() {
     const dt = Math.min(now - last, 100);
     last = now;
     const out = brain.tick(dt);
+    if (out.jumpTo != null) {
+      // reappear somewhere new (moved while still invisible)
+      window.bobee.moveBy(out.jumpTo - x, 0);
+      x = out.jumpTo;
+      brain.setX(x);
+    }
+    if (hidden !== !out.visible) {
+      hidden = !out.visible;
+      wrap.classList.toggle('away', hidden);
+      if (hidden) setThrough(true);
+    }
     if (out.dx !== 0) {
       window.bobee.moveBy(out.dx, 0);
       x += out.dx;

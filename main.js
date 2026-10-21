@@ -6,6 +6,8 @@ const { presenceFrom } = require('./lib/presence');
 const { resolveSafePath } = require('./lib/appPath');
 
 const SIZE = 200;
+// How far Bobee's window sinks past the work area, so he sits on the taskbar.
+const SINK = 4;
 const ALLOWED_TOP = new Set(['renderer', 'assets', 'messages.json']);
 const MAX_HEIGHT = 600;
 const MIME = {
@@ -76,7 +78,7 @@ function sendBounds() {
 function dropToFloor() {
   const wa = workArea();
   const b = win.getBounds();
-  setBoundsClamped(fx, wa.y + wa.height - b.height, b.width, b.height);
+  setBoundsClamped(fx, wa.y + wa.height + SINK - b.height, b.width, b.height);
 }
 
 function createWindow() {
@@ -85,7 +87,7 @@ function createWindow() {
     width: SIZE,
     height: SIZE,
     x: Math.round(wa.x + wa.width / 2),
-    y: Math.round(wa.y + wa.height - SIZE),
+    y: Math.round(wa.y + wa.height + SINK - SIZE),
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -131,7 +133,7 @@ function registerIpc() {
     const wa = workArea();
     const height = Math.round(Math.min(MAX_HEIGHT, wa.height, Math.max(1, h)));
     const b = win.getBounds();
-    const bottom = Math.min(b.y + b.height, wa.y + wa.height);
+    const bottom = Math.min(b.y + b.height, wa.y + wa.height + SINK);
     const y = Math.max(wa.y, bottom - height);
     setBoundsClamped(fx, y, SIZE, height);
   });

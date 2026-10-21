@@ -1,5 +1,5 @@
 const sharp=require('sharp');
-const F=96, GROUND=91; // last opaque row of every frame
+const F=96, GROUND=95; // last opaque row of every frame
 const FUR=[155,91,65],OUT=[84,35,34],DARK=[38,37,36],MUZ=[238,196,145],PAD=[195,120,89],PINK=[232,112,136],WHITE=[252,235,219];
 class Img{constructor(w,h,d){this.w=w;this.h=h;this.d=d||Buffer.alloc(w*h*4)}
  get(x,y){if(x<0||y<0||x>=this.w||y>=this.h)return null;const i=(y*this.w+x)*4;return this.d[i+3]?[this.d[i],this.d[i+1],this.d[i+2]]:null}
@@ -29,14 +29,16 @@ function walkBody(b){const n=b.clone();for(let y=67;y<b.h;y++)for(let x=0;x<b.w;
  const rows=[[67,1],[68,2],[69,4]];for(const [y,r] of rows){const a=7+r,e=49-r;for(let x=a;x<=e;x++)n.set(x,y,(x===a||x===e||y===69)?OUT:FUR)}
  // clean tail column left of body
  for(let y=60;y<67;y++)for(let x=0;x<7;x++)n.set(x,y,null);return n}
-function leg(n,x0,y0,h){const w=11,b=y0+h-1;for(let y=y0;y<=b;y++)for(let x=x0;x<x0+w;x++){
- const side=x===x0||x===x0+w-1, corner=(y===b&&(x<=x0+1||x>=x0+w-2))||(y===b-1&&side&&false);
- if(y===b&&(x===x0||x===x0+w-1))continue; // rounded bottom corners
- if(y===b-1&&(x===x0||x===x0+w-1)){n.set(x,y,OUT);continue}
- const edge=side||y===b||(y===b-1&&(x===x0+1||x===x0+w-2)&&false);
- const sole=y>=b-2&&!edge&&x>x0+1&&x<x0+w-2;
- n.set(x,y,edge?OUT:(sole?PAD:FUR))}
- n.set(x0+1,b,null);n.set(x0+w-2,b,null);n.set(x0+1,b-1,OUT);n.set(x0+w-2,b-1,OUT);}
+function leg(n,x0,y0,h){
+ // short leg column, then a round oval paw at the bottom
+ const b=y0+h-1, footH=6, top=b-footH+1;
+ for(let y=y0;y<top+2;y++)for(let x=x0+1;x<=x0+9;x++)n.set(x,y,(x===x0+1||x===x0+9)?OUT:FUR);
+ const insets=[3,1,0,0,1,3], fx0=x0-1, fw=13;
+ for(let r=0;r<footH;r++){const y=top+r,a=fx0+insets[r],e=fx0+fw-1-insets[r];
+  for(let x=a;x<=e;x++){const edge=x===a||x===e||r===0&&(x<a+2||x>e-2)||r===footH-1;
+   const sole=r>=footH-3&&!edge&&x>a+1&&x<e-1;n.set(x,y,edge?OUT:(sole?PAD:FUR))}}
+ // little toe beans
+ n.set(fx0+4,b-2,[217,142,113]);n.set(fx0+6,b-2,[217,142,113]);n.set(fx0+8,b-2,[217,142,113]);}
 function frame(spr,ox,oy){const f=new Img(F,F);f.blit(spr,ox,oy);return f}
 function place(spr,lift=0){const bt=spr.bottom();return frame(spr,Math.round((F-spr.w)/2),GROUND-bt-lift)}
 async function strip(name,frames){const W=F*frames.length,s=new Img(W,F);frames.forEach((f,i)=>s.blit(f,i*F,0));await sharp(s.d,{raw:{width:W,height:F,channels:4}}).png().toFile(process.argv[2]+'/'+name+'.png');return s}
@@ -54,7 +56,7 @@ const hp=base.clone();happyEyes(hp);const h0=place(hp);const h1=place(hp,5);hear
 const dg=base.clone();surprisedMouth(dg);const d0=shiftRows(dg,70,84,2);const d1=shiftRows(dg,70,84,3);const D0=place(d0),D1=place(d1);drop(D0,Math.round((F-base.w)/2)+base.w-6,30);drop(D1,Math.round((F-base.w)/2)+base.w-6,32);S.drag=[D0,D1];
 // walk: standing on two little legs, holding the cup
 const wb=walkBody(base);moveSteam(wb,0,false);
-function walkFrame(liftL,liftR,bob,mirrorSteam){const n=new Img(base.w,base.h+12);n.blit(wb,0,0,[0,69]);if(mirrorSteam)moveSteam(n,0,true);leg(n,14,68,11-liftL);leg(n,32,68,11-liftR);for(const x0 of [14,32])for(let x=x0+1;x<x0+10;x++){n.set(x,68,FUR);n.set(x,69,FUR)}
+function walkFrame(liftL,liftR,bob,mirrorSteam){const n=new Img(base.w,base.h+12);n.blit(wb,0,0,[0,69]);if(mirrorSteam)moveSteam(n,0,true);leg(n,14,68,10-liftL);leg(n,32,68,10-liftR);for(const x0 of [14,32])for(let x=x0+2;x<x0+9;x++){n.set(x,68,FUR);n.set(x,69,FUR)}
  const f=place(n);if(bob){const g=new Img(F,F);g.blit(f,0,-1);return g}return f}
 // keep feet planted: place() aligns lowest pixel; lifted leg is shorter so body stays level
 S.walk=[walkFrame(4,0,false,false),walkFrame(0,0,true,true),walkFrame(0,4,false,false),walkFrame(0,0,true,true)];

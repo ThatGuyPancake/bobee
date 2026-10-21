@@ -11,6 +11,14 @@ const ONFIRE_STREAK = 300;
 const ONFIRE_COOLDOWN_MS = 30 * 60 * 1000;
 const RANDOM_MIN_MS = 20 * 60 * 1000;
 const RANDOM_MAX_MS = 40 * 60 * 1000;
+// Away trips: Bobee wanders off screen now and then, at most
+// AWAY_BUDGET_MS per hour of screen time (time awake, not asleep or paused).
+const HOUR_MS = 60 * 60 * 1000;
+const AWAY_BUDGET_MS = 5 * 60 * 1000;
+const AWAY_MIN_MS = 45 * 1000;
+const AWAY_MAX_MS = 3 * 60 * 1000;
+const AWAY_GAP_MIN_MS = 8 * 60 * 1000;
+const AWAY_GAP_MAX_MS = 25 * 60 * 1000;
 
 export function createBrain({
   random = Math.random,
@@ -38,6 +46,11 @@ export function createBrain({
   let dragging = false;
   let downWasSleep = false;
   const bubbles = [];
+  let hourClock = 0; // screen time into the current hour
+  let awayUsed = 0; // away time spent in the current hour
+  let awayTimer = 0; // screen time until the next trip may start
+  let awayLeft = 0; // time left on the current trip
+  let jumpTo = null; // where to reappear, reported once
 
   const rand = (a, b) => a + random() * (b - a);
   const clamp = (v) => Math.min(hi, Math.max(lo, v));
@@ -72,6 +85,20 @@ export function createBrain({
   }
   resetRandomTimer();
   enterIdle();
+  awayTimer = rand(AWAY_GAP_MIN_MS, AWAY_GAP_MAX_MS);
+
+  function goAway() {
+    awayLeft = Math.min(rand(AWAY_MIN_MS, AWAY_MAX_MS), AWAY_BUDGET_MS - awayUsed);
+    state = 'away';
+  }
+
+  function comeBack() {
+    jumpTo = clamp(lo + random() * (hi - lo));
+    px = jumpTo;
+    target = px;
+    awayTimer = rand(AWAY_GAP_MIN_MS, AWAY_GAP_MAX_MS);
+    enterIdle();
+  }
 
   function center() {
     return (lo + hi) / 2;
@@ -95,9 +122,27 @@ export function createBrain({
       if (state === 'drag') {
         // stays until pointerUp
       } else if (paused) {
-        if (state !== 'idle') enterIdle();
+        if (state === 'away') comeBack();
+        else if (state !== 'idle') enterIdle();
       } else {
-        if (state === 'sleep') {
+        if (state !== 'sleep' && systemIdle < SLEEP_IDLE_S) {
+          hourClock += dt;
+          if (state !== 'away') awayTimer -= dt;
+          if (hourClock >= HOUR_MS) {
+            hourClock -= HOUR_MS;
+            awayUsed = 0;
+          }
+        }
+        if (state === 'away') {
+          awayUsed += dt;
+          awayLeft -= dt;
+          if (systemIdle >= SLEEP_IDLE_S) {
+            comeBack();
+            state = 'sleep';
+          } else if (awayLeft <= 0) {
+            comeBack();
+          }
+        } else if (state === 'sleep') {
           if (systemIdle < SLEEP_IDLE_S) enterIdle();
         } else if (systemIdle >= SLEEP_IDLE_S) {
           state = 'sleep';
@@ -105,7 +150,9 @@ export function createBrain({
 
         if (state === 'idle') {
           stateTimer -= dt;
-          if (stateTimer <= 0) {
+          if (awayTimer <= 0 && AWAY_BUDGET_MS - awayUsed >= AWAY_MIN_MS) {
+            goAway();
+          } else if (stateTimer <= 0) {
             if (random() < WALK_CHANCE) startWalk();
             else enterIdle();
           }
@@ -132,7 +179,7 @@ export function createBrain({
           }
         }
 
-        if (state !== 'sleep') {
+        if (state !== 'sleep' && state !== 'away') {
           randomTimer -= dt;
           if (randomTimer <= 0) {
             bubbles.push('random');
@@ -141,17 +188,25 @@ export function createBrain({
         }
       }
 
+      const jump = jumpTo;
+      jumpTo = null;
       return {
         state,
         animation: animationFor(),
         facing,
         dx,
+        visible: state !== 'away',
+        jumpTo: jump,
         bubble: bubbles.length ? bubbles.shift() : null,
       };
     },
 
     keyPulse() {
       if (paused || state === 'drag') return;
+      if (state === 'away') {
+        wake();
+        return;
+      }
       wake();
       if (clock - lastPulseAt >= TYPING_END_MS) pulses = 0;
       lastPulseAt = clock;

@@ -42,25 +42,26 @@ html, body {
 }
 #sprite-wrap {
   position: relative;
-  width: 192px;
-  height: 192px;
-  margin-bottom: 4px;
+  width: 96px;
+  height: 96px;
 }
 canvas {
   display: block;
-  width: 192px;
-  height: 192px;
+  width: 96px;
+  height: 96px;
 }
 #zzz {
   position: absolute;
-  right: 30px;
-  top: 40px;
-  font: bold 20px system-ui, sans-serif;
+  right: 10px;
+  top: 12px;
+  font: bold 14px system-ui, sans-serif;
   color: #5a6fa8;
   pointer-events: none;
   animation: zfloat 2s ease-in-out infinite;
 }
 #zzz[hidden] { display: none; }
+#sprite-wrap { transition: opacity 600ms ease; }
+#sprite-wrap.away { opacity: 0; }
 @keyframes zfloat {
   0%, 100% { transform: translateY(0); opacity: 0.6; }
   50% { transform: translateY(-8px); opacity: 1; }

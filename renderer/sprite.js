@@ -1,7 +1,7 @@
 export const FRAME = 64;
-// Canvas size in px. Frames are square and scaled to fit it, so 64px art
-// draws at 3x and 96px art at 2x: same size on screen.
-export const CANVAS = 192;
+// Canvas size in px. Frames are square and drawn at the largest whole
+// scale that fits: 96px art at 1x, 64px placeholders at 1x.
+export const CANVAS = 96;
 
 const NAMES = ['idle', 'walk', 'sleep', 'drag', 'happy'];
 const DEFAULT_FPS = { idle: 2, walk: 8, sleep: 2, drag: 1, happy: 4 };
