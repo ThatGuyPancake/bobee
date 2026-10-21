@@ -1,0 +1,29 @@
+{
+  "name": "bobee",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "start": "electron .",
+    "placeholders": "node scripts/make-placeholders.js",
+    "dist": "electron-builder --win"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "productName": "Bobee",
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
+    "pngjs": "^7.0.0",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "uiohook-napi": "^1.5.5"
+  }
+}
