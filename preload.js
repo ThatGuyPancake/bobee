@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 function listen(channel, cb) {
+  if (typeof cb !== 'function') return () => {};
   const handler = (_event, ...args) => cb(...args);
   ipcRenderer.on(channel, handler);
   return () => ipcRenderer.removeListener(channel, handler);

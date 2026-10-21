@@ -5,17 +5,18 @@ const { app, BrowserWindow, ipcMain, net, powerMonitor, protocol, screen } = req
 const { presenceFrom } = require('./lib/presence');
 
 const SIZE = 200;
-const BLOCKED = new Set(['node_modules', '.git', '.superpowers']);
+const ALLOWED_TOP = new Set(['renderer', 'assets', 'messages.json']);
+const MAX_HEIGHT = 600;
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'bobee', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-}
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
 
 let win = null;
+let fx = 0; // float x, so sub-pixel dx accumulates
 let presence = 'active';
 let idleTimer = null;
 let hook = null;
@@ -37,8 +38,9 @@ function range(wa, width) {
 function setBoundsClamped(x, y, width, height) {
   const wa = workArea();
   const { minX, maxX } = range(wa, width);
+  fx = Math.min(maxX, Math.max(minX, x));
   win.setBounds({
-    x: Math.round(Math.min(maxX, Math.max(minX, x))),
+    x: Math.round(fx),
     y: Math.round(y),
     width,
     height,
@@ -58,7 +60,7 @@ function sendBounds() {
 function dropToFloor() {
   const wa = workArea();
   const b = win.getBounds();
-  setBoundsClamped(b.x, wa.y + wa.height - b.height, b.width, b.height);
+  setBoundsClamped(fx, wa.y + wa.height - b.height, b.width, b.height);
 }
 
 function resolveAppPath(urlStr) {
@@ -74,7 +76,9 @@ function resolveAppPath(urlStr) {
   const full = path.resolve(__dirname, '.' + path.sep + rel.replace(/^(?:\/|\\)+/, ''));
   const r = path.relative(__dirname, full);
   if (!r || r.startsWith('..') || path.isAbsolute(r)) return null;
-  if (BLOCKED.has(r.split(path.sep)[0])) return null;
+  const parts = r.split(path.sep);
+  if (parts.some((p) => p.includes(':'))) return null;
+  if (!ALLOWED_TOP.has(parts[0].toLowerCase())) return null;
   return full;
 }
 
@@ -86,7 +90,6 @@ function createWindow() {
     x: Math.round(wa.x + wa.width / 2),
     y: Math.round(wa.y + wa.height - SIZE),
     transparent: true,
-    frameless: true,
     frame: false,
     alwaysOnTop: true,
     skipTaskbar: true,
@@ -98,9 +101,13 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
+  fx = win.getBounds().x;
   win.setAlwaysOnTop(true, 'screen-saver');
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.setIgnoreMouseEvents(true, { forward: true });
   win.once('ready-to-show', () => win.showInactive());
   win.on('closed', () => { win = null; });
@@ -108,31 +115,39 @@ function createWindow() {
 }
 
 function registerIpc() {
-  ipcMain.on('move-by', (_e, dx, dy) => {
-    if (!win || !num(dx, dy)) return;
+  const trusted = (e) => !!win && !win.isDestroyed() && e.sender === win.webContents;
+  ipcMain.on('move-by', (e, dx, dy) => {
+    if (!trusted(e) || !num(dx, dy)) return;
     const b = win.getBounds();
-    setBoundsClamped(b.x + dx, b.y + dy, b.width, b.height);
+    setBoundsClamped(fx + dx, b.y + dy, b.width, b.height);
   });
-  ipcMain.on('move-to', (_e, x, y) => {
-    if (!win || !num(x, y)) return;
+  ipcMain.on('move-to', (e, x, y) => {
+    if (!trusted(e) || !num(x, y)) return;
     const b = win.getBounds();
     setBoundsClamped(x, y, b.width, b.height);
   });
-  ipcMain.on('drop-to-floor', () => {
-    if (win) dropToFloor();
+  ipcMain.on('drop-to-floor', (e) => {
+    if (trusted(e)) dropToFloor();
   });
-  ipcMain.on('set-height', (_e, h) => {
-    if (!win || !num(h) || h < 1) return;
+  ipcMain.on('set-height', (e, h) => {
+    if (!trusted(e) || !num(h)) return;
+    const wa = workArea();
+    const height = Math.round(Math.min(MAX_HEIGHT, wa.height, Math.max(1, h)));
     const b = win.getBounds();
-    const height = Math.round(h);
-    setBoundsClamped(b.x, b.y + b.height - height, SIZE, height);
+    const bottom = Math.min(b.y + b.height, wa.y + wa.height);
+    const y = Math.max(wa.y, bottom - height);
+    setBoundsClamped(fx, y, SIZE, height);
   });
-  ipcMain.on('set-click-through', (_e, on) => {
-    if (!win) return;
+  ipcMain.on('set-click-through', (e, on) => {
+    if (!trusted(e)) return;
     if (on) win.setIgnoreMouseEvents(true, { forward: true });
     else win.setIgnoreMouseEvents(false);
   });
-  ipcMain.handle('get-bounds', () => (win ? currentBounds() : null));
+  ipcMain.handle('get-bounds', (e) => {
+    if (trusted(e)) return currentBounds();
+    // Untrusted sender: return a harmless default instead of window state.
+    return { x: 0, y: 0, width: SIZE, height: SIZE, minX: 0, maxX: 0 };
+  });
 }
 
 function startIdlePoll() {
@@ -157,7 +172,7 @@ function startHook() {
   }
 }
 
-app.whenReady().then(() => {
+if (gotLock) app.whenReady().then(() => {
   protocol.handle('bobee', (request) => {
     const file = resolveAppPath(request.url);
     if (!file) return new Response('Not found', { status: 404 });
@@ -170,13 +185,13 @@ app.whenReady().then(() => {
 
   const onMetrics = () => {
     if (!win) return;
+    fx = win.getBounds().x;
     dropToFloor();
     sendBounds();
   };
   screen.on('display-metrics-changed', onMetrics);
 });
 
-app.on('second-instance', () => {});
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => {
   if (idleTimer) clearInterval(idleTimer);
