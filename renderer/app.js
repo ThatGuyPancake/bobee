@@ -74,6 +74,7 @@ async function main() {
 
   // Pointer handling and click-through hit testing.
   let pressed = false;
+  let moved = false;
   let grab = null; // pointer offset within the window, once known
   let clickThrough = true;
   const setThrough = (on) => {
@@ -90,8 +91,11 @@ async function main() {
 
   window.addEventListener('mousemove', (e) => {
     if (pressed) {
-      brain.pointerMove(e.screenX, e.screenY);
-      if (grab) window.bobee.moveTo(e.screenX - grab.x, e.screenY - grab.y);
+      const isDrag = brain.pointerMove(e.screenX, e.screenY);
+      if (isDrag && grab) {
+        moved = true;
+        window.bobee.moveTo(e.screenX - grab.x, e.screenY - grab.y);
+      }
       return;
     }
     setThrough(!opaqueAt(e));
@@ -112,7 +116,9 @@ async function main() {
     pressed = false;
     grab = null;
     const result = brain.pointerUp();
-    if (result === 'drag') {
+    const wasMoved = moved;
+    moved = false;
+    if (result === 'drag' || wasMoved) {
       window.bobee.dropToFloor();
       await syncX();
     }
@@ -120,7 +126,7 @@ async function main() {
 
   let last = performance.now();
   function frame(now) {
-    const dt = now - last;
+    const dt = Math.min(now - last, 100);
     last = now;
     const out = brain.tick(dt);
     if (out.dx !== 0) {
@@ -138,4 +144,4 @@ async function main() {
   requestAnimationFrame(frame);
 }
 
-main();
+main().catch((e) => console.error('[bobee]', e));
