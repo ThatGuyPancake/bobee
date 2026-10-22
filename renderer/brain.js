@@ -19,10 +19,15 @@ const RANDOM_MAX_MS = 40 * 60 * 1000;
 // VISIT_BUDGET_MS per hour. While the screen is idle (sleep) or paused he is
 // always shown, and that time does not count.
 const HOUR_MS = 60 * 60 * 1000;
-const VISITS_PER_HOUR = 3;
-const VISIT_BUDGET_MS = 5 * 60 * 1000;
-const VISIT_MIN_MS = 60 * 1000;
-const VISIT_MAX_MS = 100 * 1000;
+const VISITS_PER_HOUR = 4;
+const VISIT_BUDGET_MS = 10 * 60 * 1000;
+const VISIT_MIN_MS = 120 * 1000;
+const VISIT_MAX_MS = 150 * 1000;
+// On a visit he says something soon after arriving, then every so often.
+const TALK_FIRST_MIN_MS = 2 * 1000;
+const TALK_FIRST_MAX_MS = 4 * 1000;
+const TALK_MIN_MS = 40 * 1000;
+const TALK_MAX_MS = 70 * 1000;
 const WAKE_GRACE_MS = 5 * 1000; // after a nap-only appearance, linger, then leave
 const SUMMON_MS = 60 * 1000; // tray "Say something" visit
 
@@ -66,6 +71,7 @@ export function createBrain({
   let visitLeft = 0;
   let graceLeft = 0;
   let pendingRandom = false; // a random bubble came due while he was away
+  let talkTimer = 0; // on a visit: time until he says something
   let jumpTo = null; // where to teleport the window, reported once
 
   const rand = (a, b) => a + random() * (b - a);
@@ -145,6 +151,7 @@ export function createBrain({
     onVisit = visitMs > 0;
     visitLeft = visitMs;
     graceLeft = 0;
+    talkTimer = rand(TALK_FIRST_MIN_MS, TALK_FIRST_MAX_MS);
     state = 'enter';
   }
 
@@ -205,11 +212,20 @@ export function createBrain({
     if (onVisit) {
       if (due) planIdx++; // already here; skip that slot
       visitLeft -= dt;
+      if (px >= lo && px <= hi) {
+        // talk once he's fully on screen, even while still walking in
+        talkTimer -= dt;
+        if (talkTimer <= 0) {
+          bubbles.push('random');
+          talkTimer = rand(TALK_MIN_MS, TALK_MAX_MS);
+        }
+      }
       if (state !== 'enter' && visitLeft <= exitMs()) leave();
     } else if (due) {
       // a visit is due while he's lingering after a nap: make it a visit
       onVisit = true;
       visitLeft = Math.min(plan[planIdx++].dur, Math.max(0, VISIT_BUDGET_MS - visibleUsed));
+      talkTimer = rand(TALK_FIRST_MIN_MS, TALK_FIRST_MAX_MS);
     } else {
       if (graceLeft <= 0) graceLeft = WAKE_GRACE_MS;
       graceLeft -= dt;
@@ -283,7 +299,7 @@ export function createBrain({
           }
         }
 
-        if (state !== 'sleep') {
+        if (!visits && state !== 'sleep') {
           randomTimer -= dt;
           if (randomTimer <= 0) {
             pendingRandom = true;

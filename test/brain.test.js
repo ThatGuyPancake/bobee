@@ -240,12 +240,13 @@ describe('brain: visits', () => {
     }
   });
 
-  it('visible at most 5 minutes per hour of active screen time, and still visits every hour', () => {
+  it('visible at most 10 minutes per hour of active screen time, and still visits every hour', () => {
     const b = mkV({ random: seeded(3) });
     const out = run(b, 6 * 60 * MIN, 1000);
     for (let h = 0; h < 6; h++) {
       const hour = out.slice(h * 3600, (h + 1) * 3600);
-      expect(hour.filter(visibleAwake).length).toBeLessThanOrEqual(5 * 60);
+      expect(hour.filter(visibleAwake).length).toBeLessThanOrEqual(10 * 60);
+      if (h > 0) expect(hour.filter(visibleAwake).length).toBeGreaterThan(5 * 60);
     }
     for (let h = 1; h < 6; h++) {
       const two = out.slice(h * 3600 - 1800, h * 3600 + 3600);
@@ -316,14 +317,33 @@ describe('brain: visits', () => {
     expect(o.jumpTo).not.toBeNull();
   });
 
-  it('visits are spread out: one in each third of every hour', () => {
+  it('visits are spread out: one in each quarter of every hour', () => {
     const b = mkV({ random: seeded(9) });
     const out = run(b, 6 * 60 * MIN, 1000);
     for (let h = 1; h < 6; h++) {
-      for (let t = 0; t < 3; t++) {
-        const from = h * 3600 + t * 1200;
-        expect(out.slice(from, from + 1200).some(visibleAwake)).toBe(true);
+      for (let q = 0; q < 4; q++) {
+        const from = h * 3600 + q * 900;
+        expect(out.slice(from, from + 900).some(visibleAwake)).toBe(true);
       }
+    }
+  });
+
+  it('talks soon after arriving and a few times during each visit', () => {
+    const b = mkV({ random: seeded(4) });
+    const out = run(b, 3 * 60 * MIN, 1000);
+    // split into visits: runs of visible, awake seconds
+    const visits = [];
+    let cur = null;
+    out.forEach((o, i) => {
+      if (visibleAwake(o)) {
+        if (!cur) visits.push((cur = { start: i, talks: [] }));
+        if (o.bubble === 'random') cur.talks.push(i - cur.start);
+      } else cur = null;
+    });
+    expect(visits.length).toBeGreaterThanOrEqual(10);
+    for (const v of visits) {
+      expect(v.talks.length).toBeGreaterThanOrEqual(2);
+      expect(v.talks[0]).toBeLessThanOrEqual(15); // walking in plus a few seconds
     }
   });
 
