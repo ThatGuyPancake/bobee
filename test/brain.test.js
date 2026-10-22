@@ -317,13 +317,21 @@ describe('brain: visits', () => {
     expect(o.jumpTo).not.toBeNull();
   });
 
-  it('visits are spread out: one in each quarter of every hour', () => {
+  it('visits come regularly: one in every 10 minutes', () => {
     const b = mkV({ random: seeded(9) });
     const out = run(b, 6 * 60 * MIN, 1000);
-    for (let h = 1; h < 6; h++) {
-      for (let q = 0; q < 4; q++) {
-        const from = h * 3600 + q * 900;
-        expect(out.slice(from, from + 900).some(visibleAwake)).toBe(true);
+    for (let from = 3600; from < 6 * 3600; from += 600) {
+      expect(out.slice(from, from + 600).some(visibleAwake)).toBe(true);
+    }
+  });
+
+  it('is never gone for more than about 11 minutes of screen time', () => {
+    for (const seed of [1, 2, 3, 9, 21]) {
+      const b = mkV({ random: seeded(seed) });
+      let gone = 0;
+      for (const o of run(b, 6 * 60 * MIN, 1000)) {
+        gone = o.visible ? 0 : gone + 1;
+        expect(gone).toBeLessThanOrEqual(11 * 60);
       }
     }
   });

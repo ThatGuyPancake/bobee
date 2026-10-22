@@ -12,22 +12,23 @@ const ONFIRE_STREAK = 300;
 const ONFIRE_COOLDOWN_MS = 30 * 60 * 1000;
 const RANDOM_MIN_MS = 20 * 60 * 1000;
 const RANDOM_MAX_MS = 40 * 60 * 1000;
-// Visits: Bobee is usually off screen. Each hour of active screen time is
-// split into VISITS_PER_HOUR equal slots with one visit at a random time in
-// each, so visits are spread across the hour. Visits last VISIT_MIN_MS to
+// Visits: Bobee is usually off screen. Each hour of active screen time gets
+// VISITS_PER_HOUR evenly spaced visits, each nudged later by up to
+// VISIT_JITTER_MS so it doesn't feel mechanical; he's never gone long. Visits last VISIT_MIN_MS to
 // VISIT_MAX_MS (walking on and off included) and add up to at most
 // VISIT_BUDGET_MS per hour. While the screen is idle (sleep) or paused he is
 // always shown, and that time does not count.
 const HOUR_MS = 60 * 60 * 1000;
-const VISITS_PER_HOUR = 4;
+const VISITS_PER_HOUR = 6;
 const VISIT_BUDGET_MS = 10 * 60 * 1000;
-const VISIT_MIN_MS = 120 * 1000;
-const VISIT_MAX_MS = 150 * 1000;
+const VISIT_MIN_MS = 85 * 1000;
+const VISIT_MAX_MS = 100 * 1000;
+const VISIT_JITTER_MS = 2 * 60 * 1000;
 // On a visit he says something soon after arriving, then every so often.
 const TALK_FIRST_MIN_MS = 2 * 1000;
 const TALK_FIRST_MAX_MS = 4 * 1000;
-const TALK_MIN_MS = 40 * 1000;
-const TALK_MAX_MS = 70 * 1000;
+const TALK_MIN_MS = 30 * 1000;
+const TALK_MAX_MS = 45 * 1000;
 const WAKE_GRACE_MS = 5 * 1000; // after a nap-only appearance, linger, then leave
 const SUMMON_MS = 60 * 1000; // tray "Say something" visit
 
@@ -112,7 +113,7 @@ export function createBrain({
     const out = [];
     for (let i = 0; i < VISITS_PER_HOUR; i++) {
       const dur = rand(VISIT_MIN_MS, VISIT_MAX_MS);
-      const start = withHello && i === 0 ? 0 : i * slot + rand(0, slot - dur);
+      const start = withHello && i === 0 ? 0 : i * slot + rand(0, VISIT_JITTER_MS);
       out.push({ start, dur });
     }
     return out;
