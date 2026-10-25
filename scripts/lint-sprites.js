@@ -7,9 +7,10 @@ const { PNG } = require('pngjs');
 
 const FRAME = 96;
 const TOP_MARGIN = 4; // masters keep this many empty rows at the top for hearts and Zs
+const HOPS = new Set(['happy']); // strips whose frames jump on purpose, so their feet leave the ground
 
 // image: { width, height, data } with RGBA bytes. Returns a list of problem strings.
-function lintImage(img, { master = false } = {}) {
+function lintImage(img, { master = false, hops = false } = {}) {
   const { width: w, height: h, data } = img;
   const problems = [];
   const alpha = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : data[(y * w + x) * 4 + 3]);
@@ -56,7 +57,7 @@ function lintImage(img, { master = false } = {}) {
   }
 
   const used = grounds.filter((g) => g >= 0);
-  if (used.length > 1 && new Set(used).size > 1) {
+  if (!hops && used.length > 1 && new Set(used).size > 1) {
     problems.push(`feet are not on the same ground row: ${grounds.map((g, f) => `frame ${f}: row ${g}`).join(', ')}`);
   }
   return problems;
@@ -64,7 +65,8 @@ function lintImage(img, { master = false } = {}) {
 
 function lintFile(file) {
   const img = PNG.sync.read(fs.readFileSync(file));
-  return lintImage(img, { master: /^bobee-master.*\.png$/.test(path.basename(file)) });
+  const name = path.basename(file);
+  return lintImage(img, { master: /^bobee-master.*\.png$/.test(name), hops: HOPS.has(name.replace(/\.png$/, '')) });
 }
 
 function defaultFiles(root = path.join(__dirname, '..')) {
@@ -91,4 +93,4 @@ if (require.main === module) {
   process.exitCode = failed ? 1 : 0;
 }
 
-module.exports = { FRAME, TOP_MARGIN, lintImage, lintFile, defaultFiles };
+module.exports = { FRAME, TOP_MARGIN, HOPS, lintImage, lintFile, defaultFiles };

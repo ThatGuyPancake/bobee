@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import path from 'path';
-import fs from 'fs';
-import { lintImage, lintFile } from '../scripts/lint-sprites.js';
+import { lintImage, lintFile, defaultFiles } from '../scripts/lint-sprites.js';
 
 // A blank strip of `frames` 96x96 frames, plus a helper to fill rectangles.
 function strip(frames = 1) {
@@ -49,15 +48,21 @@ describe('lintImage', () => {
     expect(p).toContain('frame 0 feet are on row 90, expected the bottom row 95');
     expect(p).toContain('frame 0 starts on row 2, keep the top 4 rows free');
   });
+  it('lets hop strips leave the ground', () => {
+    expect(lintImage(strip(2).fill(20, 10, 70, 95).fill(116, 10, 166, 90), { hops: true })).toEqual([]);
+  });
 });
 
-// The animation strips in assets/bobee/ are still the old hand-edited ones; they join this
-// check once they are redrawn from the masters. `node scripts/lint-sprites.js` checks them all.
-describe('master sprites', () => {
-  for (const name of ['bobee-master.png']) {
-    it(`${name} is clean`, () => {
-      const file = path.join(__dirname, '..', 'art', name);
-      expect(fs.existsSync(file)).toBe(true);
+describe('Bobee sprites', () => {
+  const files = defaultFiles(path.join(__dirname, '..'));
+  it('include the master and every animation strip', () => {
+    const names = files.map((f) => path.basename(f));
+    for (const n of ['bobee-master.png', 'idle.png', 'walk.png', 'sleep.png', 'drag.png', 'happy.png']) {
+      expect(names).toContain(n);
+    }
+  });
+  for (const file of files) {
+    it(`${path.basename(file)} is clean`, () => {
       expect(lintFile(file)).toEqual([]);
     });
   }
