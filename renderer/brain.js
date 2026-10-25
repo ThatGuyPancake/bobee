@@ -1,3 +1,5 @@
+import { walkSpeedFactor } from './motion.js';
+
 const WALK_SPEED = 40; // px/s
 const EXIT_SPEED = 60; // px/s, a bit quicker when heading off screen
 const IDLE_MIN = 3000;
@@ -74,6 +76,8 @@ export function createBrain({
   let pendingRandom = false; // a random bubble came due while he was away
   let talkTimer = 0; // on a visit: time until he says something
   let jumpTo = null; // where to teleport the window, reported once
+  let moveFrom = px; // where the current walk started, for easing
+  let moveState = null;
 
   const rand = (a, b) => a + random() * (b - a);
   const clamp = (v) => Math.min(hi, Math.max(lo, v));
@@ -266,6 +270,7 @@ export function createBrain({
           state = 'sleep';
         }
 
+        if (!MOVING.has(state)) moveState = null;
         if (state === 'idle') {
           stateTimer -= dt;
           if (stateTimer <= 0) {
@@ -284,7 +289,16 @@ export function createBrain({
         } else if (MOVING.has(state)) {
           if (state === 'walk') target = clamp(target);
           const dist = target - px;
-          const speed = state === 'exit' ? EXIT_SPEED : WALK_SPEED;
+          if (moveState !== state) {
+            moveState = state;
+            moveFrom = px;
+          }
+          // ease in and out; heading off screen he keeps his pace to the edge
+          const ease = walkSpeedFactor(
+            Math.abs(px - moveFrom),
+            state === 'exit' ? Infinity : Math.abs(dist)
+          );
+          const speed = (state === 'exit' ? EXIT_SPEED : WALK_SPEED) * ease;
           const step = Math.min((speed * dt) / 1000, Math.abs(dist));
           if (Math.abs(dist) < 1e-9 || (state === 'walk' && hi - lo < 1)) {
             if (state === 'exit') gone();

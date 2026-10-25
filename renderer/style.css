@@ -49,6 +49,13 @@ canvas {
   display: block;
   width: 96px;
   height: 96px;
+  image-rendering: pixelated; /* stay crisp while squashed or tilted */
+  transform-origin: 50% 100%; /* his feet */
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  canvas { transform: none !important; }
+  #zzz { animation: none; }
 }
 #zzz {
   position: absolute;
