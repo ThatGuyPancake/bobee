@@ -4,11 +4,7 @@ import { createBrain } from './brain.js';
 import { createBubble } from './bubble.js';
 import { createMotion, toTransform } from './motion.js';
 import { createPetting, petMoment } from './petting.js';
-
-// Until the mood module arrives (milestone 3): night is 0-5, the rest is day.
-function phaseOf(date) {
-  return date.getHours() < 6 ? 'night' : 'day';
-}
+import { phaseOf } from './mood.js';
 
 // strips with lettering (the sleep Zs), which must not be mirrored
 const NO_MIRROR = new Set(['sleep', 'yawn', 'sleep-peek', 'sleep-pet']);
