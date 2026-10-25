@@ -88,6 +88,11 @@ Breathing, squash and stretch, the walk bob, the hover wiggle and the drag tilt 
 
 - `sweet`, `jokes`, `facts`: said every so often while he's visiting. Each time, a group is picked at random first, so a long list doesn't crowd out a short one.
 - `click`: said when you click Bobee. If it's missing, he picks from the other three.
+- Groups he says on cue, never at random:
+  - `morning`, `lunch`, `evening`: the parts of the day (the first visit of a morning, the lunch snack, now and then in the evening).
+  - `treat`, `yum`, `full`: the treat jar (it appears, a treat is eaten, the jar is empty).
+  - `winter`, `christmas`, `newyear`, `valentine`, `easter`, `spring`, `summer`, `halloween`: holidays and seasons.
+  Any of these you leave out, or that are broken, use a built-in line instead.
 - A message in `[ ]` brackets is shown as separate bubbles a few seconds apart, which is how jokes get a setup and a punchline. A plain `"text"` is one bubble.
 
 If the file is broken (a missing comma, say), the built-in defaults are used. Emoji are welcome. Rebuild with `npm run dist` to ship changes.

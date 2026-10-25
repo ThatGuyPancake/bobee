@@ -9,7 +9,27 @@ export const DEFAULT_MESSAGES = {
   jokes: [['What do you call a bear with no teeth?', 'A gummy bear! 🐻']],
   facts: [['Octopuses have three hearts 🐙']],
   click: [['hehe, hi!'], ['boop!']],
+  // the day's rhythm, treats and holidays: said on cue, never at random
+  morning: [['good morning ☀️']],
+  lunch: [['lunch time! 🥪']],
+  evening: [["don't stay up too late 🌙"]],
+  treat: [['ooh, snacks? 🍯']],
+  yum: [['yum! 🍪']],
+  full: [["I'm so full! 🐻"]],
+  winter: [['brr, cozy scarf time 🧣']],
+  christmas: [['Merry Christmas! 🎄']],
+  newyear: [['Happy New Year! 🎉']],
+  valentine: [["Happy Valentine's ❤️"]],
+  easter: [['Happy Easter! 🐣']],
+  spring: [['spring is here 🌸']],
+  summer: [['summer vibes 😎']],
+  halloween: [['boo! 🎃']],
 };
+
+export const EXTRA_GROUPS = [
+  'morning', 'lunch', 'evening', 'treat', 'yum', 'full', 'winter',
+  'christmas', 'newyear', 'valentine', 'easter', 'spring', 'summer', 'halloween',
+];
 
 function toItem(v) {
   if (typeof v === 'string') return v.trim() ? [v] : null;
@@ -24,10 +44,10 @@ function toList(v) {
   return v.map(toItem).filter(Boolean);
 }
 
+const copyList = (list) => list.map((m) => [...m]);
+
 function copyDefaults() {
-  return Object.fromEntries(
-    Object.entries(DEFAULT_MESSAGES).map(([k, list]) => [k, list.map((m) => [...m])])
-  );
+  return Object.fromEntries(Object.entries(DEFAULT_MESSAGES).map(([k, list]) => [k, copyList(list)]));
 }
 
 export function parseMessages(text) {
@@ -47,10 +67,17 @@ export function parseMessages(text) {
     jokes: toList(data.jokes),
     facts: toList(data.facts),
   };
-  if (GROUPS.every((g) => out[g].length === 0)) return copyDefaults();
+  // each extra group comes from the file if it's valid, else its default
+  const extras = Object.fromEntries(
+    EXTRA_GROUPS.map((g) => {
+      const list = toList(data[g]);
+      return [g, list.length ? list : copyList(DEFAULT_MESSAGES[g])];
+    })
+  );
+  if (GROUPS.every((g) => out[g].length === 0)) return { ...copyDefaults(), ...extras };
   const click = toList(data.click);
   out.click = click.length ? click : [...out.sweet, ...out.jokes, ...out.facts];
-  return out;
+  return { ...out, ...extras };
 }
 
 const keyOf = (item) => JSON.stringify(item);
@@ -71,12 +98,27 @@ function makeNext(list, rand) {
 export function createPicker(messages, random = Math.random) {
   const groups = GROUPS.filter((g) => messages[g] && messages[g].length);
   const next = Object.fromEntries(groups.map((g) => [g, makeNext(messages[g], random)]));
+  const named = new Map(); // pickers for next(group), made on first use
   return {
-    // Pick a group first so each kind comes up about equally often.
-    nextRandom() {
-      const g = groups[Math.floor(random() * groups.length)];
-      return next[g]();
+    // Pick a group first so each kind comes up about equally often. A happy
+    // Bobee gives sweet extra weight (sweetWeight 2: twice each other group).
+    nextRandom({ sweetWeight = 1 } = {}) {
+      const weights = groups.map((g) => (g === 'sweet' ? Math.max(0, sweetWeight) : 1));
+      let r = random() * weights.reduce((a, b) => a + b, 0);
+      let i = 0;
+      while (i < groups.length - 1 && r >= weights[i]) r -= weights[i++];
+      return next[groups[i]]();
     },
     nextClick: makeNext(messages.click, random),
+    // A line from one group (morning, yum, christmas...), or null if there's none.
+    next(group) {
+      if (!named.has(group)) {
+        const own = Object.hasOwn(messages, group) ? messages[group] : null;
+        const list = own && own.length ? own : Object.hasOwn(DEFAULT_MESSAGES, group) ? DEFAULT_MESSAGES[group] : null;
+        if (!list || !list.length) return null;
+        named.set(group, makeNext(list, random));
+      }
+      return named.get(group)();
+    },
   };
 }
