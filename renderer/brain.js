@@ -5,6 +5,7 @@ const EXIT_SPEED = 60; // px/s, a bit quicker when heading off screen
 const IDLE_MIN = 3000;
 const IDLE_MAX = 8000;
 const WALK_CHANCE = 0.7;
+const SIP_CHANCE = 0.2; // when an idle spell ends and he doesn't walk, he sometimes sips his coffee
 const SLEEP_IDLE_S = 120;
 const DRAG_THRESHOLD = 4;
 const TYPING_END_MS = 3000;
@@ -36,6 +37,7 @@ const SUMMON_MS = 60 * 1000; // tray "Say something" visit
 
 const MOVING = new Set(['walk', 'enter', 'exit']);
 const PASSING = new Set(['enter', 'exit']); // walking on or off screen
+const TIMED = new Set(['happy', 'wave', 'sip']); // short one-off moments, then back to idle
 
 export function createBrain({
   random = Math.random,
@@ -43,6 +45,10 @@ export function createBrain({
   maxX = 0,
   x = 0,
   happyMs = 750,
+  // the new moments last one or two plays of their strip; 0 turns a moment off
+  waveMs = 0, // waves hello when he arrives on a visit or is greeted
+  sipMs = 0, // sips his coffee now and then while idle
+  yawnMs = 0, // yawns before falling asleep
   visits = true,
   margin = 0, // how far past the bounds counts as fully off screen
 } = {}) {
@@ -86,6 +92,22 @@ export function createBrain({
   function enterIdle() {
     state = 'idle';
     stateTimer = rand(IDLE_MIN, IDLE_MAX);
+  }
+
+  // a timed moment (wave, sip); skipped when its duration is 0
+  function startMoment(name, ms) {
+    if (ms > 0) {
+      state = name;
+      stateTimer = ms;
+    } else enterIdle();
+  }
+
+  // the screen went idle: yawn first, then sleep
+  function startSleep() {
+    if (yawnMs > 0) {
+      state = 'yawn';
+      stateTimer = yawnMs;
+    } else state = 'sleep';
   }
 
   function startWalk() {
@@ -177,6 +199,13 @@ export function createBrain({
     walkIn(Math.min(dur, left));
   }
 
+  // the end of a walk: gone if he was leaving, a wave hello if he just came on screen
+  function arrive() {
+    if (state === 'exit') gone();
+    else if (state === 'enter') startMoment('wave', waveMs);
+    else enterIdle();
+  }
+
   function center() {
     return (lo + hi) / 2;
   }
@@ -264,22 +293,27 @@ export function createBrain({
 
         if (visits) tickVisits(dt, screenIdle);
 
-        if (state === 'sleep') {
+        if (state === 'sleep' || state === 'yawn') {
           if (!screenIdle) enterIdle();
         } else if (screenIdle && state !== 'away') {
-          state = 'sleep';
+          startSleep();
         }
 
         if (!MOVING.has(state)) moveState = null;
         if (state === 'idle') {
           stateTimer -= dt;
           if (stateTimer <= 0) {
-            if (random() < WALK_CHANCE) startWalk();
+            const r = random();
+            if (r < WALK_CHANCE) startWalk();
+            else if (r < WALK_CHANCE + SIP_CHANCE && sipMs > 0) startMoment('sip', sipMs);
             else enterIdle();
           }
-        } else if (state === 'happy') {
+        } else if (TIMED.has(state)) {
           stateTimer -= dt;
           if (stateTimer <= 0) enterIdle();
+        } else if (state === 'yawn') {
+          stateTimer -= dt;
+          if (stateTimer <= 0) state = 'sleep';
         } else if (state === 'typing') {
           faceCenter();
           if (clock - lastPulseAt >= TYPING_END_MS) {
@@ -301,16 +335,12 @@ export function createBrain({
           const speed = (state === 'exit' ? EXIT_SPEED : WALK_SPEED) * ease;
           const step = Math.min((speed * dt) / 1000, Math.abs(dist));
           if (Math.abs(dist) < 1e-9 || (state === 'walk' && hi - lo < 1)) {
-            if (state === 'exit') gone();
-            else enterIdle();
+            arrive();
           } else {
             dx = Math.sign(dist) * step;
             px += dx;
             facing = dist > 0 ? 'right' : 'left';
-            if (Math.abs(target - px) < 1e-9) {
-              if (state === 'exit') gone();
-              else enterIdle();
-            }
+            if (Math.abs(target - px) < 1e-9) arrive();
           }
         }
 
@@ -404,6 +434,7 @@ export function createBrain({
     // or on his way out.
     summon() {
       if (!present) walkIn(SUMMON_MS);
+      else if (!paused && (state === 'idle' || state === 'walk' || state === 'sip')) startMoment('wave', waveMs); // greeted
       else if (state === 'exit') {
         onVisit = true;
         visitLeft = SUMMON_MS;

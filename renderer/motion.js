@@ -41,8 +41,9 @@ export function hopOffset(tMs, height = 7, durMs = HOP_MS) {
   return -Math.round(height * 4 * u * (1 - u)) || 0;
 }
 
-// Walk bob: lifts a pixel or two on each step, from distance walked.
-export const STEP_PX = 10;
+// Walk bob: lifts a pixel or two on each step, from distance walked. One step
+// of the walk strip (4 frames at 9 fps) covers about 18 px at walking speed.
+export const STEP_PX = 18;
 export function bobOffset(distancePx, amp = 2, stepPx = STEP_PX) {
   return -Math.round(amp * Math.abs(Math.sin((Math.PI * distancePx) / stepPx))) || 0;
 }

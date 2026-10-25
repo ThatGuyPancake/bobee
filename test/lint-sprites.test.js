@@ -57,7 +57,7 @@ describe('Bobee sprites', () => {
   const files = defaultFiles(path.join(__dirname, '..'));
   it('include the master and every animation strip', () => {
     const names = files.map((f) => path.basename(f));
-    for (const n of ['bobee-master.png', 'idle.png', 'walk.png', 'sleep.png', 'drag.png', 'happy.png']) {
+    for (const n of ['bobee-master.png', 'idle.png', 'walk.png', 'sleep.png', 'drag.png', 'happy.png', 'wave.png', 'sip.png', 'yawn.png']) {
       expect(names).toContain(n);
     }
   });
