@@ -1,7 +1,7 @@
 import { walkSpeedFactor } from './motion.js';
+import { HOUR_MS, VISIT_BUDGET_MS, VISIT_MIN_MS, makePlan } from './visits.js';
 
 const WALK_SPEED = 40; // px/s
-const EXIT_SPEED = 60; // px/s, a bit quicker when heading off screen
 const IDLE_MIN = 3000;
 const IDLE_MAX = 8000;
 const WALK_CHANCE = 0.7;
@@ -15,29 +15,25 @@ const ONFIRE_STREAK = 300;
 const ONFIRE_COOLDOWN_MS = 30 * 60 * 1000;
 const RANDOM_MIN_MS = 20 * 60 * 1000;
 const RANDOM_MAX_MS = 40 * 60 * 1000;
-// Visits: Bobee is usually off screen. Each hour of active screen time gets
-// VISITS_PER_HOUR evenly spaced visits, each nudged later by up to
-// VISIT_JITTER_MS so it doesn't feel mechanical; he's never gone long. Visits last VISIT_MIN_MS to
-// VISIT_MAX_MS (walking on and off included) and add up to at most
-// VISIT_BUDGET_MS per hour. While the screen is idle (sleep) or paused he is
-// always shown, and that time does not count.
-const HOUR_MS = 60 * 60 * 1000;
-const VISITS_PER_HOUR = 6;
-const VISIT_BUDGET_MS = 10 * 60 * 1000;
-const VISIT_MIN_MS = 85 * 1000;
-const VISIT_MAX_MS = 100 * 1000;
-const VISIT_JITTER_MS = 2 * 60 * 1000;
-// On a visit he says something soon after arriving, then every so often.
+// On a visit he says something soon after waking, then every so often.
 const TALK_FIRST_MIN_MS = 2 * 1000;
 const TALK_FIRST_MAX_MS = 4 * 1000;
 const TALK_MIN_MS = 30 * 1000;
 const TALK_MAX_MS = 45 * 1000;
-const WAKE_GRACE_MS = 5 * 1000; // after a nap-only appearance, linger, then leave
 const SUMMON_MS = 60 * 1000; // tray "Say something" visit
+const EVENING_FACTOR = 0.7; // evening visits are shorter
+// Easing at both ends of a walk makes it a little slower than distance / speed.
+const WALK_EASE_SLACK_MS = 1500;
+// Woken in place (a click, a drop, a treat): how long he stays up before
+// heading home for a nap.
+export const NAP_WAKE_MS = 60 * 1000;
 
-const MOVING = new Set(['walk', 'enter', 'exit']);
-const PASSING = new Set(['enter', 'exit']); // walking on or off screen
-const TIMED = new Set(['happy', 'wave', 'sip']); // short one-off moments, then back to idle
+// Asleep: at home in the corner, or in place where he was left.
+const ASLEEP = new Set(['home', 'sleep']);
+// On his way to sleep: no typing, no wandering.
+const SETTLING = new Set(['homing', 'dozing']);
+// While waking up he only stirs; keys don't start typing yet.
+const QUIET = new Set([...ASLEEP, ...SETTLING, 'waking']);
 
 export function createBrain({
   random = Math.random,
@@ -45,12 +41,12 @@ export function createBrain({
   maxX = 0,
   x = 0,
   happyMs = 750,
-  // the new moments last one or two plays of their strip; 0 turns a moment off
-  waveMs = 0, // waves hello when he arrives on a visit or is greeted
+  // the moments last one or two plays of their strip; 0 turns a moment off
+  waveMs = 0, // waves hello when he wakes for a visit or is greeted
   sipMs = 0, // sips his coffee now and then while idle
-  yawnMs = 0, // yawns before falling asleep
+  yawnMs = 0, // yawns when he wakes and before he falls asleep
+  peekMs = 0, // at night a click only makes him peek with one eye
   visits = true,
-  margin = 0, // how far past the bounds counts as fully off screen
 } = {}) {
   let lo = minX;
   let hi = Math.max(minX, maxX);
@@ -58,9 +54,12 @@ export function createBrain({
   let state = 'idle';
   let facing = 'right';
   let clock = 0;
-  let stateTimer = 0; // ms remaining in idle/happy
+  let stateTimer = 0; // ms remaining in idle, a timed moment, waking or dozing
+  let timedState = null; // the timed moment now playing (happy, wave, sip, pet...)
+  let sleepMoment = null; // { name, left }: a moment played while he stays asleep
   let target = px;
   let paused = false;
+  let phase = 'day';
   let systemIdle = 0;
   let lastPulseAt = -Infinity;
   let pulses = 0;
@@ -69,45 +68,89 @@ export function createBrain({
   let randomTimer = 0;
   let down = null; // { x, y } while pointer is down
   let dragging = false;
-  let downWasSleep = false;
+  let downWasAsleep = false;
   const bubbles = [];
+  const events = [];
   let hourClock = 0; // active screen time into the current hour
-  let visibleUsed = 0; // visible time used in the current hour
+  let awakeUsed = 0; // awake time used in the current hour
   let plan = []; // this hour's visits: { start, dur } in hourClock ms
   let planIdx = 0;
-  let present = true; // on screen at all
-  let onVisit = false; // present because of a visit (vs. nap/pause)
+  let onVisit = false;
+  let announced = false; // this visit reported 'visit-start', so it reports 'visit-end'
   let visitLeft = 0;
-  let graceLeft = 0;
-  let pendingRandom = false; // a random bubble came due while he was away
+  let awakeLeft = 0; // woken in place: time until he heads home
   let talkTimer = 0; // on a visit: time until he says something
-  let jumpTo = null; // where to teleport the window, reported once
+  let pendingRandom = false;
   let moveFrom = px; // where the current walk started, for easing
   let moveState = null;
+  let bedIsHome = false; // dozing off in the corner (vs. where he was dropped)
 
   const rand = (a, b) => a + random() * (b - a);
   const clamp = (v) => Math.min(hi, Math.max(lo, v));
-  const clampWide = (v) => Math.min(hi + margin, Math.max(lo - margin, v));
+  const atHome = () => Math.abs(px - hi) < 1e-9;
 
   function enterIdle() {
     state = 'idle';
+    timedState = null;
     stateTimer = rand(IDLE_MIN, IDLE_MAX);
   }
 
-  // a timed moment (wave, sip); skipped when its duration is 0
+  // a timed moment, then back to idle; skipped when its duration is 0
   function startMoment(name, ms) {
     if (ms > 0) {
       state = name;
+      timedState = name;
       stateTimer = ms;
     } else enterIdle();
   }
 
-  // the screen went idle: yawn first, then sleep
-  function startSleep() {
-    if (yawnMs > 0) {
-      state = 'yawn';
-      stateTimer = yawnMs;
+  // asleep where he stands: the corner is home, anywhere else is a nap in place
+  function lieDown() {
+    timedState = null;
+    if (atHome()) {
+      px = hi;
+      state = 'home';
     } else state = 'sleep';
+  }
+
+  // yawn, then sleep
+  function startDozing() {
+    timedState = null;
+    bedIsHome = atHome();
+    if (yawnMs > 0) {
+      state = 'dozing';
+      stateTimer = yawnMs;
+    } else lieDown();
+  }
+
+  // the walk home to the corner, then a yawn and sleep
+  function goHome() {
+    timedState = null;
+    awakeLeft = 0;
+    if (atHome()) {
+      px = hi;
+      startDozing();
+      return;
+    }
+    target = hi;
+    facing = target > px ? 'right' : 'left';
+    state = 'homing';
+  }
+
+  // Settled in the corner: home is always the corner, wherever the window is.
+  function pinnedHome() {
+    return state === 'home' || (state === 'dozing' && bedIsHome);
+  }
+
+  // Straight to bed at home (Pause), ending any visit.
+  function bedAtHome() {
+    if (onVisit) endVisit();
+    awakeLeft = 0;
+    timedState = null;
+    sleepMoment = null;
+    px = hi;
+    target = hi;
+    state = 'home';
   }
 
   function startWalk() {
@@ -134,136 +177,123 @@ export function createBrain({
     randomTimer = rand(RANDOM_MIN_MS, RANDOM_MAX_MS);
   }
 
-  function makePlan(withHello) {
-    const slot = HOUR_MS / VISITS_PER_HOUR;
-    const out = [];
-    for (let i = 0; i < VISITS_PER_HOUR; i++) {
-      const dur = rand(VISIT_MIN_MS, VISIT_MAX_MS);
-      const start = withHello && i === 0 ? 0 : i * slot + rand(0, VISIT_JITTER_MS);
-      out.push({ start, dur });
-    }
-    return out;
+  // how long the walk home and the yawn take from here
+  function homeMs() {
+    return (Math.abs(hi - px) / WALK_SPEED) * 1000 + (atHome() ? 0 : WALK_EASE_SLACK_MS) + yawnMs;
   }
 
-  // Nearest point fully off screen.
-  function exitTarget() {
-    return px - lo <= hi - px ? lo - margin : hi + margin;
-  }
-
-  function exitMs() {
-    return (Math.abs(exitTarget() - px) / EXIT_SPEED) * 1000;
-  }
-
-  // Start walking off screen.
-  function leave() {
-    target = exitTarget();
-    facing = target > px ? 'right' : 'left';
-    state = 'exit';
-  }
-
-  function gone() {
-    present = false;
+  function endVisit() {
+    if (announced) events.push('visit-end');
     onVisit = false;
-    state = 'away';
+    announced = false;
+    visitLeft = 0;
   }
 
-  // Walk on from a random edge to a random spot.
-  function walkIn(visitMs) {
-    const fromLeft = random() < 0.5;
-    px = fromLeft ? lo - margin : hi + margin;
-    jumpTo = px;
-    target = clamp(lo + random() * (hi - lo));
-    facing = target > px ? 'right' : 'left';
-    present = true;
-    onVisit = visitMs > 0;
-    visitLeft = visitMs;
-    graceLeft = 0;
+  function beginVisit(ms) {
+    onVisit = true;
+    announced = true;
+    visitLeft = ms;
+    awakeLeft = 0;
     talkTimer = rand(TALK_FIRST_MIN_MS, TALK_FIRST_MAX_MS);
-    state = 'enter';
+    events.push('visit-start');
   }
 
-  // Appear in place right away (nobody is watching: nap or pause).
-  function popIn() {
-    jumpTo = clamp(lo + random() * (hi - lo));
-    px = jumpTo;
-    target = px;
-    present = true;
-    onVisit = false;
-    graceLeft = 0;
-    enterIdle();
-  }
-
+  // A planned visit: he wakes where he is, yawns, then waves hello.
   function startVisit(dur) {
-    const left = VISIT_BUDGET_MS - visibleUsed;
+    const left = VISIT_BUDGET_MS - awakeUsed;
     if (left < VISIT_MIN_MS) return;
-    walkIn(Math.min(dur, left));
+    sleepMoment = null;
+    beginVisit(Math.min(dur, left));
+    timedState = null;
+    if (yawnMs > 0) {
+      state = 'waking';
+      stateTimer = yawnMs;
+    } else startMoment('wave', waveMs);
   }
 
-  // the end of a walk: gone if he was leaving, a wave hello if he just came on screen
-  function arrive() {
-    if (state === 'exit') gone();
-    else if (state === 'enter') startMoment('wave', waveMs);
-    else enterIdle();
+  // Wake up right where he is, for NAP_WAKE_MS (unless he's on a visit).
+  function wakeHere() {
+    sleepMoment = null;
+    if (ASLEEP.has(state) || SETTLING.has(state) || state === 'waking') enterIdle();
+    if (visits && !onVisit) awakeLeft = NAP_WAKE_MS;
   }
 
-  function center() {
-    return (lo + hi) / 2;
+  // A timed animation. Asleep, he stays asleep and goes on sleeping after it;
+  // otherwise he goes back to idle.
+  function playMoment(name, ms) {
+    if (state === 'drag' || dragging || paused || !(ms > 0)) return;
+    if (ASLEEP.has(state)) sleepMoment = { name, left: ms };
+    else {
+      sleepMoment = null;
+      startMoment(name, ms);
+    }
   }
 
   function faceCenter() {
-    facing = px < center() ? 'right' : 'left';
+    facing = px < (lo + hi) / 2 ? 'right' : 'left';
   }
 
   function animationFor() {
+    if (sleepMoment) return sleepMoment.name;
     if (state === 'typing') return clock < typingHappyUntil ? 'happy' : 'idle';
-    if (PASSING.has(state)) return 'walk';
+    if (state === 'home') return 'sleep';
+    if (state === 'homing') return 'walk';
+    if (state === 'waking' || state === 'dozing') return 'yawn';
     return state;
   }
 
   resetRandomTimer();
   enterIdle();
   if (visits) {
-    // Starts off screen; the first planned visit (a hello) begins right away.
-    present = false;
-    state = 'away';
-    plan = makePlan(true);
+    // He starts asleep in the corner; the first visit comes within a few minutes.
+    px = hi;
+    target = hi;
+    state = 'home';
+    plan = makePlan(random, false);
   }
 
   function tickVisits(dt, screenIdle) {
+    const asleep = ASLEEP.has(state);
     if (screenIdle) {
-      // always show him while the screen is idle, in place, to nap
-      if (!present || PASSING.has(state)) popIn();
+      // nobody's watching: any visit ends and he heads home for a nap
+      if (!asleep && !SETTLING.has(state) && state !== 'drag') {
+        endVisit();
+        goHome();
+      }
       return;
     }
-    if (present && state !== 'sleep') visibleUsed += dt;
+    if (!asleep) awakeUsed += dt;
 
     const due = planIdx < plan.length && hourClock >= plan[planIdx].start;
-    if (!present) {
+    if (due && phase === 'night') {
+      planIdx++; // no visits at night
+      return;
+    }
+    if (asleep) {
       if (due) startVisit(plan[planIdx++].dur);
       return;
     }
-    if (state === 'sleep' || state === 'exit' || state === 'drag') return;
+    if (state === 'drag' || SETTLING.has(state)) return; // a due visit waits until he's asleep
     if (onVisit) {
       if (due) planIdx++; // already here; skip that slot
       visitLeft -= dt;
-      if (px >= lo && px <= hi) {
-        // talk once he's fully on screen, even while still walking in
+      if (state !== 'waking') {
         talkTimer -= dt;
         if (talkTimer <= 0) {
           bubbles.push('random');
           talkTimer = rand(TALK_MIN_MS, TALK_MAX_MS);
         }
       }
-      if (state !== 'enter' && visitLeft <= exitMs()) leave();
+      if (state !== 'waking' && visitLeft <= homeMs()) {
+        endVisit();
+        goHome();
+      }
     } else if (due) {
-      // a visit is due while he's lingering after a nap: make it a visit
-      onVisit = true;
-      visitLeft = Math.min(plan[planIdx++].dur, Math.max(0, VISIT_BUDGET_MS - visibleUsed));
-      talkTimer = rand(TALK_FIRST_MIN_MS, TALK_FIRST_MAX_MS);
+      // a visit came due while he was awake anyway: make it a visit
+      beginVisit(Math.min(plan[planIdx++].dur, Math.max(0, VISIT_BUDGET_MS - awakeUsed)));
     } else {
-      if (graceLeft <= 0) graceLeft = WAKE_GRACE_MS;
-      graceLeft -= dt;
-      if (graceLeft <= 0) leave();
+      awakeLeft -= dt;
+      if (awakeLeft <= 0) goHome();
     }
   }
 
@@ -273,33 +303,33 @@ export function createBrain({
       clock += dt;
       let dx = 0;
 
+      if (sleepMoment && state !== 'drag') {
+        sleepMoment.left -= dt;
+        if (sleepMoment.left <= 0) sleepMoment = null;
+      }
+
       if (state === 'drag') {
         // stays until pointerUp
       } else if (paused) {
-        // paused: always shown, frozen, not counted
-        if (visits && (!present || PASSING.has(state))) popIn();
-        else if (state !== 'idle') enterIdle();
+        // paused: hidden, asleep at home (or idle without visits), nothing counted
       } else {
         const screenIdle = systemIdle >= SLEEP_IDLE_S;
         if (!screenIdle) {
           hourClock += dt;
           if (hourClock >= HOUR_MS) {
             hourClock -= HOUR_MS;
-            visibleUsed = 0;
-            plan = makePlan(false);
+            awakeUsed = 0;
+            plan = makePlan(random, false, phase === 'evening' ? EVENING_FACTOR : 1);
             planIdx = 0;
           }
         }
 
         if (visits) tickVisits(dt, screenIdle);
+        else if (ASLEEP.has(state) || state === 'dozing') {
+          if (!screenIdle) enterIdle(); // without visits he wakes when you come back
+        } else if (screenIdle) startDozing();
 
-        if (state === 'sleep' || state === 'yawn') {
-          if (!screenIdle) enterIdle();
-        } else if (screenIdle && state !== 'away') {
-          startSleep();
-        }
-
-        if (!MOVING.has(state)) moveState = null;
+        if (state !== 'walk' && state !== 'homing') moveState = null;
         if (state === 'idle') {
           stateTimer -= dt;
           if (stateTimer <= 0) {
@@ -308,81 +338,80 @@ export function createBrain({
             else if (r < WALK_CHANCE + SIP_CHANCE && sipMs > 0) startMoment('sip', sipMs);
             else enterIdle();
           }
-        } else if (TIMED.has(state)) {
+        } else if (state === timedState) {
           stateTimer -= dt;
           if (stateTimer <= 0) enterIdle();
-        } else if (state === 'yawn') {
+        } else if (state === 'waking') {
           stateTimer -= dt;
-          if (stateTimer <= 0) state = 'sleep';
+          if (stateTimer <= 0) startMoment('wave', waveMs);
+        } else if (state === 'dozing') {
+          stateTimer -= dt;
+          if (stateTimer <= 0) lieDown();
         } else if (state === 'typing') {
           faceCenter();
           if (clock - lastPulseAt >= TYPING_END_MS) {
             pulses = 0;
             enterIdle();
           }
-        } else if (MOVING.has(state)) {
+        } else if (state === 'walk' || state === 'homing') {
           if (state === 'walk') target = clamp(target);
+          else target = hi;
           const dist = target - px;
           if (moveState !== state) {
             moveState = state;
             moveFrom = px;
           }
-          // ease in and out; heading off screen he keeps his pace to the edge
-          const ease = walkSpeedFactor(
-            Math.abs(px - moveFrom),
-            state === 'exit' ? Infinity : Math.abs(dist)
-          );
-          const speed = (state === 'exit' ? EXIT_SPEED : WALK_SPEED) * ease;
-          const step = Math.min((speed * dt) / 1000, Math.abs(dist));
+          const ease = walkSpeedFactor(Math.abs(px - moveFrom), Math.abs(dist));
+          const step = Math.min((WALK_SPEED * ease * dt) / 1000, Math.abs(dist));
+          const arrive = () => (state === 'homing' ? startDozing() : enterIdle());
           if (Math.abs(dist) < 1e-9 || (state === 'walk' && hi - lo < 1)) {
             arrive();
           } else {
             dx = Math.sign(dist) * step;
             px += dx;
             facing = dist > 0 ? 'right' : 'left';
-            if (Math.abs(target - px) < 1e-9) arrive();
+            if (Math.abs(target - px) < 1e-9) {
+              px = target;
+              arrive();
+            }
           }
         }
 
-        if (!visits && state !== 'sleep') {
+        if (!visits && !ASLEEP.has(state)) {
           randomTimer -= dt;
           if (randomTimer <= 0) {
             pendingRandom = true;
             resetRandomTimer();
           }
         }
-        // only talk while he's on screen, awake, and not leaving
-        if (pendingRandom && present && state !== 'sleep' && state !== 'exit') {
+        // only talk while he's awake
+        if (pendingRandom && !QUIET.has(state)) {
           pendingRandom = false;
           bubbles.push('random');
         }
       }
 
-      const jump = jumpTo;
-      jumpTo = null;
       return {
         state,
         animation: animationFor(),
         facing,
         dx,
-        x: px, // where Bobee is; may be past the bounds while walking on/off
-        visible: present,
-        jumpTo: jump,
+        x: px,
+        visible: true, // he never leaves the screen; Pause hides the window instead
+        event: events.length ? events.shift() : null,
         bubble: bubbles.length ? bubbles.shift() : null,
       };
     },
 
     keyPulse() {
       if (paused || state === 'drag') return;
-      if (!present || PASSING.has(state)) {
-        wake();
-        return;
-      }
       wake();
+      if (QUIET.has(state)) return; // asleep or settling: typing doesn't wake him
       if (clock - lastPulseAt >= TYPING_END_MS) pulses = 0;
       lastPulseAt = clock;
       pulses++;
       state = 'typing';
+      timedState = null;
       faceCenter();
       if (pulses % TYPING_HAPPY_EVERY === 0) typingHappyUntil = clock + TYPING_HAPPY_MS;
       if (pulses >= ONFIRE_STREAK && clock - lastFireAt >= ONFIRE_COOLDOWN_MS) {
@@ -395,7 +424,7 @@ export function createBrain({
     pointerDown(sx, sy) {
       down = { x: sx, y: sy };
       dragging = false;
-      downWasSleep = state === 'sleep';
+      downWasAsleep = ASLEEP.has(state);
     },
 
     pointerMove(sx, sy) {
@@ -403,6 +432,8 @@ export function createBrain({
       if (!dragging && Math.hypot(sx - down.x, sy - down.y) > DRAG_THRESHOLD) {
         dragging = true;
         wake();
+        sleepMoment = null;
+        timedState = null;
         state = 'drag';
       }
       return dragging;
@@ -410,37 +441,71 @@ export function createBrain({
 
     pointerUp() {
       if (!down) return null;
-      const wasSleep = downWasSleep;
+      const wasAsleep = downWasAsleep || ASLEEP.has(state);
       const wasDrag = dragging;
       down = null;
       dragging = false;
-      downWasSleep = false;
+      downWasAsleep = false;
       wake();
       if (wasDrag) {
-        enterIdle();
+        if (paused && visits) bedAtHome();
+        else if (paused) enterIdle();
+        else if (visits && phase === 'night' && !onVisit) {
+          startDozing(); // back to sleep where he lands
+          bedIsHome = false; // px is stale until the app's setX after the drop
+        }
+        else {
+          enterIdle();
+          if (visits && !onVisit) awakeLeft = NAP_WAKE_MS;
+        }
         return 'drag';
       }
-      if (paused || wasSleep || state === 'sleep') {
-        enterIdle();
-      } else {
-        state = 'happy';
-        stateTimer = happyMs;
-        bubbles.push('click');
+      if (paused) {
+        if (!visits) enterIdle();
+        return 'click';
       }
+      if (wasAsleep && visits && phase === 'night') {
+        playMoment('sleep-peek', peekMs);
+        return 'click';
+      }
+      wakeHere();
+      startMoment('happy', happyMs);
+      bubbles.push('click');
       return 'click';
     },
 
-    // Tray "Say something": bring him over for a short visit if he's away
-    // or on his way out.
+    moment: playMoment,
+
+    // Wake in place (a click, a treat, the tray): up for NAP_WAKE_MS, then home.
+    wakeHere() {
+      if (paused || state === 'drag') return;
+      wake(); // always her doing, so she's at the PC
+      wakeHere();
+    },
+
+    setPhase(p) {
+      phase = p;
+    },
+
+    // Tray "Say something": a short visit if he's asleep or heading to bed,
+    // a wave if he's already up.
     summon() {
-      if (!present) walkIn(SUMMON_MS);
-      else if (!paused && (state === 'idle' || state === 'walk' || state === 'sip')) startMoment('wave', waveMs); // greeted
-      else if (state === 'exit') {
-        onVisit = true;
+      if (paused || state === 'drag') return;
+      wake(); // she just used the tray
+      if (ASLEEP.has(state) && visits && phase === 'night') {
+        playMoment('sleep-peek', peekMs); // he only peeks at night
+        return;
+      }
+      if (ASLEEP.has(state) || SETTLING.has(state) || state === 'waking') {
+        wakeHere();
+        onVisit = true; // a short visit, though not a planned one: no visit events
         visitLeft = SUMMON_MS;
-        target = clamp(lo + random() * (hi - lo));
-        facing = target > px ? 'right' : 'left';
-        state = 'enter';
+        awakeLeft = 0;
+        talkTimer = rand(TALK_MIN_MS, TALK_MAX_MS); // the tray already says something
+        startMoment('wave', waveMs);
+      } else if (state === 'idle' || state === 'walk' || state === 'sip') {
+        if (visits && !onVisit) awakeLeft = NAP_WAKE_MS;
+        startMoment('wave', waveMs); // greeted
       }
     },
 
@@ -448,25 +513,32 @@ export function createBrain({
       systemIdle = seconds;
     },
 
+    // Paused he's hidden. With visits he's put to bed at home right away, so
+    // Resume shows him asleep in the corner.
     setPaused(p) {
       paused = !!p;
-      if (paused) bubbles.length = 0;
+      if (!paused) return;
+      bubbles.length = 0;
+      pendingRandom = false;
+      sleepMoment = null;
+      if (state === 'drag') return; // pointerUp settles him
+      if (visits) bedAtHome();
+      else enterIdle();
     },
 
     setBounds(a, b) {
       lo = a;
       hi = Math.max(a, b);
-      if (state === 'exit') target = exitTarget();
-      else if (state === 'enter') target = clamp(target);
-      if (PASSING.has(state) || state === 'away') px = clampWide(px);
-      else {
-        px = clamp(px);
-        target = clamp(target);
-      }
+      px = pinnedHome() ? hi : clamp(px); // home is always the corner
+      target = state === 'homing' ? hi : clamp(target);
+      if (ASLEEP.has(state)) state = atHome() ? 'home' : 'sleep';
     },
 
+    // Where the window really is (after a drop, or a resync). A bear settled
+    // in the corner stays there; the window follows him.
     setX(v) {
-      px = clampWide(v);
+      px = pinnedHome() ? hi : clamp(v);
+      if (ASLEEP.has(state)) state = atHome() ? 'home' : 'sleep';
     },
   };
 }
