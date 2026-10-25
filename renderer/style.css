@@ -55,21 +55,6 @@ canvas {
 }
 @media (prefers-reduced-motion: reduce) {
   canvas { transform: none !important; }
-  #zzz { animation: none; }
 }
-#zzz {
-  position: absolute;
-  right: 10px;
-  top: 12px;
-  font: bold 14px system-ui, sans-serif;
-  color: #5a6fa8;
-  pointer-events: none;
-  animation: zfloat 2s ease-in-out infinite;
-}
-#zzz[hidden] { display: none; }
 #sprite-wrap { transition: opacity 600ms ease; }
 #sprite-wrap.away { opacity: 0; }
-@keyframes zfloat {
-  0%, 100% { transform: translateY(0); opacity: 0.6; }
-  50% { transform: translateY(-8px); opacity: 1; }
-}

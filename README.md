@@ -15,22 +15,42 @@ npm run dist   # build the Windows installer -> dist/Bobee Setup.exe
 
 Electron's install script has to be approved by npm. This is already set in `package.json` (`"allowScripts": { "electron@45.0.0": true }`). If you bump the Electron version, update that entry to match, or Electron's binary won't download.
 
-Until you add your own art, Bobee uses the placeholder sprites in `assets/placeholder/`.
+Any animation missing from `assets/bobee/` falls back to the simple placeholder bear in `assets/placeholder/` (`npm run placeholders` redraws those).
 
-## Adding art
+## How the art is made
 
-Drop PNGs into `assets/bobee/`. Any missing animation falls back to its placeholder.
+All of Bobee's animations are drawn in code from one picture, so they always match him exactly. No AI art tools are used.
 
-- Files: `idle.png`, `walk.png`, `sleep.png`, `drag.png`, `happy.png`
-- Each frame is **64x64 px**; frames sit side by side in one **horizontal strip** (so a 4-frame animation is 256x64). A width that isn't a multiple of 64 is treated as a single frame.
-- Draw Bobee **facing right**; the app flips him when he walks left.
-- Put his **feet 4 px above the bottom** of the frame so he stands on the taskbar nicely.
+- `art/bobee-master.png` is the master: the original drawing of Bobee with his edges cleaned, in a 96x96 frame with his feet on the bottom row.
+- `node art/make-states.js` builds every strip in `assets/bobee/` from it. Each frame moves parts of the master by whole pixels (head, mug, feet) or redraws them in the master's own colours (eyes, mouths, paws, legs, steam, Zs, heart). Then `art/clean-edges.js` shaves the outer edge so he keeps one clean dark outline. Pass a file name as the second argument to also get a 4x preview on green: `node art/make-states.js assets/bobee preview.png`.
+- `node scripts/lint-sprites.js` checks every strip for stray pixels, soft edges and feet that drift off the ground row. The test suite runs it too.
 
-Optional `assets/bobee/sprites.json` sets frames per second per animation. Anything you leave out uses the default:
+The animations:
+
+| Strip | Frames | What happens |
+| --- | --- | --- |
+| `idle` | 8 | steam rises from his mug, a blink |
+| `walk` | 8 | a waddle on two little legs, weight shifting from foot to foot |
+| `sleep` | 6 | eyes shut, a little snore, Zs drifting up |
+| `drag` | 4 | legs dangling and kicking, surprised face, a sweat drop |
+| `happy` | 6 | a little hop with ^ ^ eyes and a heart floating up |
+| `wave` | 6 | holds the mug in one paw and waves hello with the other (when he arrives, or from the tray's Say something) |
+| `sip` | 6 | lifts the mug and sips, eyes closed (now and then while idle) |
+| `yawn` | 6 | stretches tall with a big yawn (just before he falls asleep) |
+
+Breathing, squash and stretch, the walk bob, the hover wiggle and the drag tilt are added on top in code by `renderer/motion.js`, so the frames themselves keep his body still.
+
+### Strip format
+
+- Frames are square and sit side by side in one horizontal strip; the strip's height is the frame size (96 px for Bobee, so an 8-frame strip is 768x96). A width that isn't a multiple of the height is treated as a single frame.
+- Draw Bobee facing right; the app flips him when he walks left.
+- Feet on the bottom row, and keep the top 4 rows free.
+
+`assets/bobee/sprites.json` sets frames per second per animation. Anything you leave out uses the default:
 
 ```json
 {
-  "fps": { "idle": 2, "walk": 8, "sleep": 2, "drag": 1, "happy": 4 }
+  "fps": { "idle": 4, "walk": 9, "sleep": 2, "drag": 8, "happy": 9, "wave": 8, "sip": 5, "yawn": 5 }
 }
 ```
 

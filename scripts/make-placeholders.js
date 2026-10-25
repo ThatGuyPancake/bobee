@@ -37,7 +37,7 @@ function rect(img, ox, x, y, w, h, c) {
 }
 
 // opts: dy (body/head offset), eyes ('dot'|'closed'), mouth ('none'|'open'),
-// arms ('down'|'up'), feet ([leftLift, rightLift]), lift (whole bear up)
+// arms ('down'|'up'|'wave'), feet ([leftLift, rightLift]), lift (whole bear up)
 function drawBear(img, ox, opts = {}) {
   const dy = (opts.dy || 0) - (opts.lift || 0);
   const fy = -(opts.lift || 0);
@@ -51,6 +51,9 @@ function drawBear(img, ox, opts = {}) {
   if (opts.arms === 'up') {
     ellipse(img, ox, 15, 33 + dy, 3.5, 6, BROWN);
     ellipse(img, ox, 49, 33 + dy, 3.5, 6, BROWN);
+  } else if (opts.arms === 'wave') {
+    ellipse(img, ox, 13 + (opts.wave || 0), 30 + dy, 3.5, 6, BROWN);
+    ellipse(img, ox, 45, 47 + dy, 3.5, 6, BROWN);
   } else {
     ellipse(img, ox, 19, 47 + dy, 3.5, 6, BROWN);
     ellipse(img, ox, 45, 47 + dy, 3.5, 6, BROWN);
@@ -94,6 +97,12 @@ const ANIMS = {
     { arms: 'up' },
     { arms: 'up', lift: 3 },
   ],
+  wave: [
+    { arms: 'wave', wave: -1 },
+    { arms: 'wave', wave: 1 },
+  ],
+  sip: [{}, { eyes: 'closed', dy: 1 }],
+  yawn: [{ eyes: 'closed', mouth: 'open' }, { eyes: 'closed', mouth: 'open', dy: -1 }],
 };
 
 function writePng(file, img) {

@@ -386,3 +386,79 @@ describe('brain: visits', () => {
     }
   });
 });
+
+describe('brain: wave, sip and yawn', () => {
+  const MOMENTS = { waveMs: 1500, sipMs: 1200, yawnMs: 1200 };
+
+  it('waves hello when he arrives on a visit, then goes idle', () => {
+    const b = createBrain({ random: seeded(5), minX: 0, maxX: 1000, margin: 100, ...MOMENTS });
+    const out = run(b, 60 * 1000);
+    const i = out.findIndex((o) => o.state === 'wave');
+    expect(i).toBeGreaterThan(0);
+    expect(out.slice(0, i).every((o) => o.state === 'enter')).toBe(true);
+    expect(out[i].animation).toBe('wave');
+    const waved = out.slice(i).findIndex((o) => o.state !== 'wave');
+    // he stands still while waving (the arriving tick still carries his last step)
+    for (const o of out.slice(i + 1, i + waved)) expect(o.dx).toBe(0);
+    // the tick that starts a moment also counts down, so it shows for one tick less
+    expect(waved * 100).toBeGreaterThanOrEqual(1400);
+    expect(waved * 100).toBeLessThanOrEqual(1600);
+    expect(out[i + waved].state).toBe('idle');
+  });
+
+  it('waves when greeted from the tray while he is already here', () => {
+    const b = mk(MOMENTS);
+    b.tick(100);
+    b.summon();
+    expect(b.tick(100).state).toBe('wave');
+  });
+
+  it('does not wave without a wave strip', () => {
+    const b = createBrain({ random: seeded(5), minX: 0, maxX: 1000, margin: 100 });
+    expect(run(b, 60 * 1000).some((o) => o.state === 'wave')).toBe(false);
+  });
+
+  it('sips his coffee now and then while idle, standing still', () => {
+    // 0.75 is past the walk chance but inside the sip chance
+    const b = mk({ random: () => 0.75, ...MOMENTS });
+    const out = run(b, 20 * 1000);
+    const sips = out.filter((o) => o.state === 'sip');
+    expect(sips.length).toBeGreaterThan(0);
+    for (const o of sips) {
+      expect(o.animation).toBe('sip');
+      expect(o.dx).toBe(0);
+    }
+    // each sip lasts sipMs, then he is idle again
+    const i = out.findIndex((o) => o.state === 'sip');
+    const len = out.slice(i).findIndex((o) => o.state !== 'sip');
+    expect(len * 100).toBeGreaterThanOrEqual(1100);
+    expect(out[i + len].state).toBe('idle');
+  });
+
+  it('never sips when the roll says walk or stay idle', () => {
+    for (const r of [0.1, 0.95]) {
+      const b = mk({ random: () => r, ...MOMENTS });
+      expect(run(b, 30 * 1000).some((o) => o.state === 'sip')).toBe(false);
+    }
+  });
+
+  it('yawns before falling asleep', () => {
+    const b = mk(MOMENTS);
+    b.tick(100);
+    b.setSystemIdle(120);
+    const out = run(b, 3000);
+    expect(out[0].state).toBe('yawn');
+    expect(out[0].animation).toBe('yawn');
+    const len = out.findIndex((o) => o.state !== 'yawn');
+    expect(len * 100).toBeGreaterThanOrEqual(1100);
+    expect(out.slice(len).every((o) => o.state === 'sleep')).toBe(true);
+  });
+
+  it('wakes from a yawn when you come back', () => {
+    const b = mk(MOMENTS);
+    b.setSystemIdle(150);
+    expect(b.tick(100).state).toBe('yawn');
+    b.setSystemIdle(0);
+    expect(b.tick(100).state).toBe('idle');
+  });
+});

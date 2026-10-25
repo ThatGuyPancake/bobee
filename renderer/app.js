@@ -16,7 +16,6 @@ async function fetchText(url) {
 async function main() {
   const canvas = document.getElementById('bobee');
   const bubbleEl = document.getElementById('bubble');
-  const zzz = document.getElementById('zzz');
   const wrap = document.getElementById('sprite-wrap');
   let hidden = false; // true while Bobee is away on a trip
 
@@ -50,6 +49,9 @@ async function main() {
     maxX: b0.maxX,
     x: b0.x,
     happyMs: player.durationOf('happy', 2) || 750,
+    waveMs: player.durationOf('wave', 2),
+    sipMs: player.durationOf('sip', 1),
+    yawnMs: player.durationOf('yawn', 1),
     // fully off screen once he has slid out of a window parked at the edge
     margin: (b0.width + canvas.offsetWidth) / 2,
   });
@@ -191,7 +193,6 @@ async function main() {
     }
     player.play(out.animation);
     player.setFacing(out.facing);
-    zzz.hidden = out.state !== 'sleep';
     if (out.bubble) showBubble(out.bubble);
     player.draw(now);
     const m = motion.update(now, { animation: out.animation, dx: out.dx, dragging: out.state === 'drag' });

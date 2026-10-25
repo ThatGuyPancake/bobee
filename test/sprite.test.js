@@ -28,3 +28,15 @@ describe('frameIndex', () => {
     expect(frameIndex(999, 8, 1)).toBe(0);
   });
 });
+
+describe('animations', () => {
+  it('registers every strip with a frame rate', async () => {
+    const { NAMES, DEFAULT_FPS } = await import('../renderer/sprite.js');
+    for (const n of ['idle', 'walk', 'sleep', 'drag', 'happy', 'wave', 'sip', 'yawn']) {
+      expect(NAMES).toContain(n);
+      expect(DEFAULT_FPS[n]).toBeGreaterThan(0);
+    }
+    expect(DEFAULT_FPS.walk).toBeGreaterThanOrEqual(8);
+    expect(DEFAULT_FPS.happy).toBeGreaterThanOrEqual(8);
+  });
+});
