@@ -54,5 +54,8 @@ export function createBubble(rootEl, { onResize = () => {} } = {}) {
     visible() {
       return isVisible;
     },
+    hide() {
+      if (isVisible) hide();
+    },
   };
 }

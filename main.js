@@ -163,6 +163,10 @@ function registerIpc() {
     // Untrusted sender: return a harmless default instead of window state.
     return { x: 0, y: 0, width: SIZE, height: SIZE, minX: 0, maxX: 0 };
   });
+  // BOBEE_DATE (dev builds only) pretends the clock started at that date
+  ipcMain.handle('get-config', (e) => ({
+    debugDate: trusted(e) && !app.isPackaged && process.env.BOBEE_DATE ? String(process.env.BOBEE_DATE) : null,
+  }));
   ipcMain.handle('get-state', (e) => (trusted(e) && store ? store.get() : null));
   // the store keeps only known keys with the right types
   ipcMain.on('patch-state', (e, p) => {

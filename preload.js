@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('bobee', {
   setClickThrough: (on) => ipcRenderer.send('set-click-through', !!on),
   getBounds: () => ipcRenderer.invoke('get-bounds'),
   getState: () => ipcRenderer.invoke('get-state'),
+  getConfig: () => ipcRenderer.invoke('get-config'),
   patchState: (p) => ipcRenderer.send('patch-state', p),
   onKeyPulse: (cb) => listen('key-pulse', () => cb()),
   onIdle: (cb) => listen('idle', (s) => cb(s)),

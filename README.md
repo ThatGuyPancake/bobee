@@ -1,6 +1,18 @@
 # Bobee
 
-A tiny pixel-art bear who lives on your Windows desktop. He wanders along the bottom of your screen, naps, cheers when you type, and says kind things. Made with love as a gift.
+A tiny pixel-art bear who lives on your Windows desktop. He naps in the bottom-right corner, wakes up now and then to wander along the bottom of your screen, cheers when you type, and says kind things. Made with love as a gift.
+
+## What he does
+
+- **Home.** Most of the time Bobee is asleep in the bottom-right corner of the main screen, feet on the taskbar. He never blocks clicks: only his own pixels catch the mouse.
+- **Visits.** About six times an hour he wakes up with a yawn, waves, wanders, sips his coffee and says something now and then. That adds up to about 10 minutes an hour. When the visit is over he walks back to the corner, yawns and goes back to sleep.
+- **Waking him.** Click him and he wakes up right where he is, stays up for a minute, then walks home and dozes off. Clicking him on his way home wakes him again. You can drag him anywhere; after a minute he walks back home.
+- **Say something** (tray menu) wakes him for a short visit with a wave.
+- **Away from the PC.** While the screen is idle or locked he stays asleep at home, and visits wait until you're back.
+- **Night (0:00 to 6:00).** No visits. He stays asleep.
+- **Pause** (tray menu) hides him completely. Resume brings him back asleep in his corner.
+
+His saved state (just a few counters and settings for now) lives in `bobee-state.json` in the app's data folder on this PC, and never leaves it.
 
 Built with Electron 45 and plain JavaScript.
 
@@ -14,6 +26,8 @@ npm run dist   # build the Windows installer -> dist/Bobee Setup.exe
 ```
 
 Electron's install script has to be approved by npm. This is already set in `package.json` (`"allowScripts": { "electron@45.0.0": true }`). If you bump the Electron version, update that entry to match, or Electron's binary won't download.
+
+To try a different time of day in a dev build, set `BOBEE_DATE` before starting, for example `BOBEE_DATE=2026-10-25T02:00 npm start`. The clock starts at that time and runs on normally. Installed builds ignore it.
 
 Any animation missing from `assets/bobee/` falls back to the simple placeholder bear in `assets/placeholder/` (`npm run placeholders` redraws those).
 
@@ -34,9 +48,9 @@ The animations:
 | `sleep` | 6 | eyes shut, a little snore, Zs drifting up |
 | `drag` | 4 | legs dangling and kicking, surprised face, a sweat drop |
 | `happy` | 6 | a little hop with ^ ^ eyes and a heart floating up |
-| `wave` | 6 | holds the mug in one paw and waves hello with the other (when he arrives, or from the tray's Say something) |
+| `wave` | 6 | holds the mug in one paw and waves hello with the other (when he wakes for a visit, or from the tray's Say something) |
 | `sip` | 6 | lifts the mug and sips, eyes closed (now and then while idle) |
-| `yawn` | 6 | stretches tall with a big yawn (just before he falls asleep) |
+| `yawn` | 6 | stretches tall with a big yawn (when he wakes up for a visit, and before he falls asleep) |
 
 Breathing, squash and stretch, the walk bob, the hover wiggle and the drag tilt are added on top in code by `renderer/motion.js`, so the frames themselves keep his body still.
 

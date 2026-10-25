@@ -4,6 +4,14 @@ import { createBrain } from './brain.js';
 import { createBubble } from './bubble.js';
 import { createMotion, toTransform } from './motion.js';
 
+// Until the mood module arrives (milestone 3): night is 0-5, the rest is day.
+function phaseOf(date) {
+  return date.getHours() < 6 ? 'night' : 'day';
+}
+
+// strips with lettering (the sleep Zs), which must not be mirrored
+const NO_MIRROR = new Set(['sleep', 'yawn', 'sleep-peek', 'sleep-pet']);
+
 async function fetchText(url) {
   try {
     const r = await fetch(url);
@@ -17,7 +25,16 @@ async function main() {
   const canvas = document.getElementById('bobee');
   const bubbleEl = document.getElementById('bubble');
   const wrap = document.getElementById('sprite-wrap');
-  let hidden = false; // true while Bobee is away on a trip
+  let paused = false; // Pause in the tray hides him completely
+
+  // The clock. In dev builds BOBEE_DATE sets a pretend start time, which then
+  // runs on at normal speed.
+  const config = (await window.bobee.getConfig()) || {};
+  const debugStart = config.debugDate ? new Date(config.debugDate) : null;
+  const debugAt = performance.now();
+  const useDebug = !!debugStart && !Number.isNaN(debugStart.getTime());
+  if (config.debugDate && !useDebug) console.warn('[bobee] BOBEE_DATE is not a date:', config.debugDate);
+  const now = () => (useDebug ? new Date(debugStart.getTime() + (performance.now() - debugAt)) : new Date());
 
   const picker = createPicker(parseMessages(await fetchText('/messages.json')));
   let fps = {};
@@ -52,9 +69,13 @@ async function main() {
     waveMs: player.durationOf('wave', 2),
     sipMs: player.durationOf('sip', 1),
     yawnMs: player.durationOf('yawn', 1),
-    // fully off screen once he has slid out of a window parked at the edge
-    margin: (b0.width + canvas.offsetWidth) / 2,
+    peekMs: player.durationOf('sleep-peek', 1),
   });
+
+  // morning, day, night...: checked once a minute
+  const updatePhase = () => brain.setPhase(phaseOf(now()));
+  updatePhase();
+  setInterval(updatePhase, 60 * 1000);
 
   // Show a message's bubbles one after another (a joke's setup, then its
   // punchline). A new message cancels the rest of the previous one.
@@ -67,6 +88,12 @@ async function main() {
     );
   }
 
+  function stopTalking() {
+    partTimers.forEach(clearTimeout);
+    partTimers = [];
+    bubble.hide();
+  }
+
   function showBubble(kind) {
     if (kind === 'click') say(picker.nextClick());
     else if (kind === 'random') say(picker.nextRandom());
@@ -76,6 +103,7 @@ async function main() {
   let lastState = 'idle';
   window.__bobee = {
     state: () => lastState, // for debugging: what he's doing right now
+    now: () => now(),
     showMessage: (m) => bubble.showMessage(m),
     playOverride: (img, opts) => player.playOverride(img, opts),
   };
@@ -95,10 +123,19 @@ async function main() {
     await syncX();
   });
   window.bobee.onCommand((c) => {
-    if (c === 'pause') brain.setPaused(true);
-    else if (c === 'resume') brain.setPaused(false);
-    else if (c === 'say') {
-      brain.summon(); // comes over for a short visit if he's away
+    if (c === 'pause') {
+      paused = true;
+      wrap.classList.add('away');
+      stopTalking();
+      setThrough(true);
+      brain.setPaused(true); // he's put to bed at home while hidden
+    } else if (c === 'resume') {
+      paused = false;
+      wrap.classList.remove('away');
+      brain.setPaused(false);
+      if (lastState !== 'home') brain.setX(bounds.maxX);
+    } else if (c === 'say' && !paused) {
+      brain.summon(); // wakes him for a short visit if he's asleep
       say(picker.nextRandom());
     }
   });
@@ -117,7 +154,7 @@ async function main() {
   };
 
   function opaqueAt(e) {
-    if (hidden) return bubble.visible() && bubbleEl.contains(e.target);
+    if (paused) return false;
     if (bubble.visible() && bubbleEl.contains(e.target)) return true;
     // the wrapper, not the canvas: the canvas's own motion transform would
     // shift its box around as he squashes and tilts
@@ -138,7 +175,7 @@ async function main() {
       return;
     }
     const over = opaqueAt(e);
-    if (over && !hovering && !hidden && !bubbleEl.contains(e.target)) motion.wiggle(performance.now());
+    if (over && !hovering && !bubbleEl.contains(e.target)) motion.wiggle(performance.now());
     hovering = over;
     setThrough(!over);
   });
@@ -158,6 +195,7 @@ async function main() {
     pressed = false;
     grab = null;
     lastMove = null;
+    const wasAsleep = lastState === 'home' || lastState === 'sleep';
     const result = brain.pointerUp();
     const wasMoved = moved;
     moved = false;
@@ -167,8 +205,8 @@ async function main() {
       motion.land(performance.now());
       await syncX();
       syncing = false;
-    } else if (result === 'click') {
-      motion.hop(performance.now());
+    } else if (result === 'click' && !(wasAsleep && phaseOf(now()) === 'night')) {
+      motion.hop(performance.now()); // at night he only peeks, without a hop
     }
   });
 
@@ -178,26 +216,19 @@ async function main() {
     const dt = Math.min(now - last, 100);
     last = now;
     const out = brain.tick(dt);
-    // The window follows Bobee but stops at the screen edge; past it, he
-    // slides out of the window, so the edge clips him as he walks off.
+    // The window follows Bobee; he always stays on screen.
     if (!pressed && !syncing) {
       const winX = Math.min(bounds.maxX, Math.max(bounds.minX, out.x));
       if (Math.abs(winX - x) > 0.01) {
         window.bobee.moveBy(winX - x, 0);
         x = winX;
       }
-      wrap.style.transform = `translateX(${Math.round(out.x - winX)}px)`;
-    }
-    if (hidden !== !out.visible) {
-      hidden = !out.visible;
-      wrap.classList.toggle('away', hidden);
-      if (hidden) setThrough(true);
     }
     player.play(out.animation);
     // the sleep Zs are lettering, so don't mirror him while he yawns and sleeps
-    player.setFacing(out.animation === 'sleep' || out.animation === 'yawn' ? 'right' : out.facing);
+    player.setFacing(NO_MIRROR.has(out.animation) ? 'right' : out.facing);
     lastState = out.state;
-    if (out.bubble) showBubble(out.bubble);
+    if (out.bubble && !paused) showBubble(out.bubble);
     player.draw(now);
     const m = motion.update(now, { animation: out.animation, dx: out.dx, dragging: out.state === 'drag' });
     const tf = toTransform(m);
