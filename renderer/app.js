@@ -73,7 +73,9 @@ async function main() {
     else if (kind === 'onfire') say(["you're on fire 🔥"]);
   }
 
+  let lastState = 'idle';
   window.__bobee = {
+    state: () => lastState, // for debugging: what he's doing right now
     showMessage: (m) => bubble.showMessage(m),
     playOverride: (img, opts) => player.playOverride(img, opts),
   };
@@ -192,7 +194,9 @@ async function main() {
       if (hidden) setThrough(true);
     }
     player.play(out.animation);
-    player.setFacing(out.facing);
+    // the sleep Zs are lettering, so don't mirror him while he yawns and sleeps
+    player.setFacing(out.animation === 'sleep' || out.animation === 'yawn' ? 'right' : out.facing);
+    lastState = out.state;
     if (out.bubble) showBubble(out.bubble);
     player.draw(now);
     const m = motion.update(now, { animation: out.animation, dx: out.dx, dragging: out.state === 'drag' });
