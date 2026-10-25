@@ -3,6 +3,7 @@ import { SpritePlayer } from './sprite.js';
 import { createBrain } from './brain.js';
 import { createBubble } from './bubble.js';
 import { createMotion, toTransform } from './motion.js';
+import { createPetting, petMoment } from './petting.js';
 
 // Until the mood module arrives (milestone 3): night is 0-5, the rest is day.
 function phaseOf(date) {
@@ -147,6 +148,7 @@ async function main() {
   let clickThrough = true;
   let hovering = false;
   let lastMove = null; // { x, t } for drag speed
+  const petting = createPetting();
   const setThrough = (on) => {
     if (on === clickThrough) return;
     clickThrough = on;
@@ -176,6 +178,12 @@ async function main() {
     }
     const over = opaqueAt(e);
     if (over && !hovering && !bubbleEl.contains(e.target)) motion.wiggle(performance.now());
+    // stroking him back and forth is a pet; asleep, he smiles and sleeps on
+    const onBear = over && !bubbleEl.contains(e.target);
+    if (petting.sample(e.screenX, performance.now(), onBear, e.buttons !== 0)) {
+      const name = petMoment(lastState);
+      brain.moment(name, player.durationOf(name, 1));
+    }
     hovering = over;
     setThrough(!over);
   });

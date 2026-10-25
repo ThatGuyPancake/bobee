@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createPetting } from '../renderer/petting.js';
+import { createPetting, petMoment } from '../renderer/petting.js';
 
 // x = 0, 10, 0, 10, 0: four strokes, three direction changes
 const XS = [0, 10, 0, 10, 0];
@@ -63,5 +63,18 @@ describe('petting', () => {
     p.sample(0, 400, true, false);
     p.reset();
     expect([p.sample(10, 600, true, false), p.sample(0, 800, true, false)]).toEqual([false, false]);
+  });
+});
+
+describe('petMoment', () => {
+  it('plays sleep-pet while he sleeps, so he stays asleep', () => {
+    expect(petMoment('home')).toBe('sleep-pet');
+    expect(petMoment('sleep')).toBe('sleep-pet');
+  });
+
+  it('plays pet while he is awake', () => {
+    for (const s of ['idle', 'walk', 'homing', 'dozing', 'waking', 'happy', 'sip', 'typing']) {
+      expect(petMoment(s)).toBe('pet');
+    }
   });
 });

@@ -48,3 +48,8 @@ export function createPetting({ windowMs = 1500, minTurns = 3, minStroke = 6, co
     },
   };
 }
+
+// Which strip a pet plays: asleep he smiles in his sleep and stays asleep.
+export function petMoment(state) {
+  return state === 'home' || state === 'sleep' ? 'sleep-pet' : 'pet';
+}
