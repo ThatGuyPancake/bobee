@@ -7,6 +7,7 @@ A tiny pixel-art bear who lives on your Windows desktop. He naps in the bottom-r
 - **Home.** Most of the time Bobee is asleep in the bottom-right corner of the main screen, feet on the taskbar. He never blocks clicks: only his own pixels catch the mouse.
 - **Visits.** About six times an hour he wakes up with a yawn, waves, wanders, sips his coffee and says something now and then. That adds up to about 10 minutes an hour. When the visit is over he walks back to the corner, yawns and goes back to sleep.
 - **Waking him.** Click him and he wakes up right where he is, stays up for a minute, then walks home and dozes off. Clicking him on his way home wakes him again. You can drag him anywhere; after a minute he walks back home.
+- **Petting.** Move the mouse back and forth over him a few times and he blushes, leans into it and little hearts float up. If he's asleep he smiles in his sleep and sleeps on. He can be petted again after a few seconds.
 - **Say something** (tray menu) wakes him for a short visit with a wave.
 - **Away from the PC.** While the screen is idle or locked he stays asleep at home, and visits wait until you're back.
 - **Night (0:00 to 6:00).** No visits. He stays asleep.
@@ -51,6 +52,8 @@ The animations:
 | `wave` | 6 | holds the mug in one paw and waves hello with the other (when he wakes for a visit, or from the tray's Say something) |
 | `sip` | 6 | lifts the mug and sips, eyes closed (now and then while idle) |
 | `yawn` | 6 | stretches tall with a big yawn (when he wakes up for a visit, and before he falls asleep) |
+| `pet` | 6 | eyes closed and blushing, leans into the stroke, hearts float up (when you pet him while he's awake) |
+| `sleep-pet` | 4 | smiles in his sleep with a little wiggle and one heart, without waking (when you pet him while he's asleep) |
 
 Breathing, squash and stretch, the walk bob, the hover wiggle and the drag tilt are added on top in code by `renderer/motion.js`, so the frames themselves keep his body still.
 
@@ -64,7 +67,7 @@ Breathing, squash and stretch, the walk bob, the hover wiggle and the drag tilt 
 
 ```json
 {
-  "fps": { "idle": 4, "walk": 9, "sleep": 2, "drag": 8, "happy": 9, "wave": 8, "sip": 5, "yawn": 5 }
+  "fps": { "idle": 4, "walk": 9, "sleep": 2, "drag": 8, "happy": 9, "wave": 8, "sip": 5, "yawn": 5, "pet": 7, "sleep-pet": 4 }
 }
 ```
 

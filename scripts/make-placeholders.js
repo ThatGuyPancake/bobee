@@ -103,6 +103,8 @@ const ANIMS = {
   ],
   sip: [{}, { eyes: 'closed', dy: 1 }],
   yawn: [{ eyes: 'closed', mouth: 'open' }, { eyes: 'closed', mouth: 'open', dy: -1 }],
+  pet: [{ eyes: 'closed' }, { eyes: 'closed', dy: 1 }],
+  'sleep-pet': [{ eyes: 'closed' }, { eyes: 'closed', dy: -1 }],
 };
 
 function writePng(file, img) {
