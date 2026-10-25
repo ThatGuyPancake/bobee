@@ -2,6 +2,7 @@ import { parseMessages, createPicker } from './messages.js';
 import { SpritePlayer } from './sprite.js';
 import { createBrain } from './brain.js';
 import { createBubble } from './bubble.js';
+import { createMotion, toTransform } from './motion.js';
 
 async function fetchText(url) {
   try {
@@ -33,6 +34,11 @@ async function main() {
 
   const player = new SpritePlayer(canvas);
   await player.load(fps);
+
+  // Squash, bob, breathing, wiggle and tilt on top of the frame animations.
+  const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const motion = createMotion({ size: canvas.offsetHeight || 96, reduced: reducedQuery.matches });
+  reducedQuery.addEventListener('change', (q) => motion.setReduced(q.matches));
 
   const bubble = createBubble(bubbleEl, { onResize: (h) => window.bobee.setHeight(h) });
 
@@ -98,6 +104,8 @@ async function main() {
   let moved = false;
   let grab = null; // pointer offset within the window, once known
   let clickThrough = true;
+  let hovering = false;
+  let lastMove = null; // { x, t } for drag speed
   const setThrough = (on) => {
     if (on === clickThrough) return;
     clickThrough = on;
@@ -107,7 +115,9 @@ async function main() {
   function opaqueAt(e) {
     if (hidden) return bubble.visible() && bubbleEl.contains(e.target);
     if (bubble.visible() && bubbleEl.contains(e.target)) return true;
-    const r = canvas.getBoundingClientRect();
+    // the wrapper, not the canvas: the canvas's own motion transform would
+    // shift its box around as he squashes and tilts
+    const r = wrap.getBoundingClientRect();
     return player.isOpaqueAt(e.clientX - r.left, e.clientY - r.top);
   }
 
@@ -117,10 +127,16 @@ async function main() {
       if (isDrag && grab) {
         moved = true;
         window.bobee.moveTo(e.screenX - grab.x, e.screenY - grab.y);
+        const t = performance.now();
+        if (lastMove && t > lastMove.t) motion.dragVelocity((e.screenX - lastMove.x) / (t - lastMove.t));
+        lastMove = { x: e.screenX, t };
       }
       return;
     }
-    setThrough(!opaqueAt(e));
+    const over = opaqueAt(e);
+    if (over && !hovering && !hidden && !bubbleEl.contains(e.target)) motion.wiggle(performance.now());
+    hovering = over;
+    setThrough(!over);
   });
 
   canvas.addEventListener('mousedown', async (e) => {
@@ -137,18 +153,23 @@ async function main() {
     if (!pressed) return;
     pressed = false;
     grab = null;
+    lastMove = null;
     const result = brain.pointerUp();
     const wasMoved = moved;
     moved = false;
     if (result === 'drag' || wasMoved) {
       syncing = true;
       window.bobee.dropToFloor();
+      motion.land(performance.now());
       await syncX();
       syncing = false;
+    } else if (result === 'click') {
+      motion.hop(performance.now());
     }
   });
 
   let last = performance.now();
+  let lastTransform = '';
   function frame(now) {
     const dt = Math.min(now - last, 100);
     last = now;
@@ -173,6 +194,12 @@ async function main() {
     zzz.hidden = out.state !== 'sleep';
     if (out.bubble) showBubble(out.bubble);
     player.draw(now);
+    const m = motion.update(now, { animation: out.animation, dx: out.dx, dragging: out.state === 'drag' });
+    const tf = toTransform(m);
+    if (tf !== lastTransform) {
+      canvas.style.transform = tf;
+      lastTransform = tf;
+    }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
