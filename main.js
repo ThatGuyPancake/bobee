@@ -4,6 +4,7 @@ const path = require('node:path');
 const { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, protocol, screen, Tray } = require('electron');
 const { presenceFrom } = require('./lib/presence');
 const { resolveSafePath } = require('./lib/appPath');
+const { createStore } = require('./lib/store');
 
 const SIZE = 200;
 // How far Bobee's window sinks past the work area, so he sits on the taskbar.
@@ -38,6 +39,7 @@ let idleTimer = null;
 let hook = null;
 let tray = null; // module-level reference so the Tray is not garbage collected
 let paused = false;
+let store = null; // saved state (bobee-state.json), created once the app is ready
 
 const num = (...vals) => vals.every((v) => typeof v === 'number' && Number.isFinite(v));
 
@@ -161,6 +163,12 @@ function registerIpc() {
     // Untrusted sender: return a harmless default instead of window state.
     return { x: 0, y: 0, width: SIZE, height: SIZE, minX: 0, maxX: 0 };
   });
+  ipcMain.handle('get-state', (e) => (trusted(e) && store ? store.get() : null));
+  // the store keeps only known keys with the right types
+  ipcMain.on('patch-state', (e, p) => {
+    if (!trusted(e) || !store) return;
+    store.patch(p);
+  });
 }
 
 function startIdlePoll() {
@@ -257,6 +265,7 @@ if (gotLock) app.whenReady().then(() => {
       return new Response('Not found', { status: 404 });
     }
   });
+  store = createStore(path.join(app.getPath('userData'), 'bobee-state.json'));
   registerIpc();
   createWindow();
   startIdlePoll();
@@ -276,6 +285,7 @@ if (gotLock) app.whenReady().then(() => {
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => {
   if (idleTimer) clearInterval(idleTimer);
+  if (store) store.flush();
   if (tray) { tray.destroy(); tray = null; }
   try { if (hook) hook.stop(); } catch { /* ignore */ }
 });
