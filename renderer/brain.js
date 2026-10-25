@@ -284,7 +284,8 @@ export function createBrain({
           talkTimer = rand(TALK_MIN_MS, TALK_MAX_MS);
         }
       }
-      if (state !== 'waking' && visitLeft <= homeMs()) {
+      // a moment playing (a pet, a sip) finishes before he heads home
+      if (state !== 'waking' && state !== timedState && visitLeft <= homeMs()) {
         endVisit();
         goHome();
       }
@@ -293,7 +294,7 @@ export function createBrain({
       beginVisit(Math.min(plan[planIdx++].dur, Math.max(0, VISIT_BUDGET_MS - awakeUsed)));
     } else {
       awakeLeft -= dt;
-      if (awakeLeft <= 0) goHome();
+      if (awakeLeft <= 0 && state !== timedState) goHome();
     }
   }
 

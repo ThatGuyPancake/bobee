@@ -367,6 +367,40 @@ describe('brain: home and visits', () => {
     expect(run(b, 60 * 1000, 1000).pop().state).toBe('home');
   });
 
+  it('a pet on the way home plays in full, then he carries on home', () => {
+    const b = late();
+    b.tick(100);
+    b.pointerDown(0, 0);
+    b.pointerMove(10, 0);
+    b.pointerUp();
+    b.setX(200);
+    b.setPhase('night');
+    let o;
+    for (let i = 0; i < 200 && (o = b.tick(500)).state !== 'homing'; i++);
+    expect(o.state).toBe('homing');
+    b.moment('pet', 800);
+    const out = run(b, 700, 100);
+    expect(out.every((x) => x.animation === 'pet')).toBe(true);
+    const after = run(b, 60 * 1000, 500);
+    expect(after.some((x) => x.state === 'homing')).toBe(true);
+    expect(after.pop().state).toBe('home');
+  });
+
+  it('a pet while he yawns off to sleep plays in full, then he still goes to sleep', () => {
+    const b = late();
+    b.tick(100);
+    b.pointerDown(0, 0);
+    b.pointerMove(10, 0);
+    b.pointerUp();
+    b.setPhase('night');
+    let o;
+    for (let i = 0; i < 3000 && (o = b.tick(100)).state !== 'dozing'; i++);
+    expect(o.state).toBe('dozing');
+    b.moment('pet', 800);
+    expect(run(b, 700, 100).every((x) => x.animation === 'pet')).toBe(true);
+    expect(run(b, 10 * 1000, 500).pop().state).toBe('home');
+  });
+
   it('night: no visits and a click only peeks', () => {
     const b = mkV({ peekMs: 800 });
     b.setPhase('night');
