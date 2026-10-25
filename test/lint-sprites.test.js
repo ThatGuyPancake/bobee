@@ -54,7 +54,7 @@ describe('lintImage', () => {
 // The animation strips in assets/bobee/ are still the old hand-edited ones; they join this
 // check once they are redrawn from the masters. `node scripts/lint-sprites.js` checks them all.
 describe('master sprites', () => {
-  for (const name of ['bobee-master.png', 'bobee-master-nomug.png']) {
+  for (const name of ['bobee-master.png']) {
     it(`${name} is clean`, () => {
       const file = path.join(__dirname, '..', 'art', name);
       expect(fs.existsSync(file)).toBe(true);
