@@ -500,6 +500,57 @@ describe('brain: home and visits', () => {
     expect(o.x).toBe(800);
   });
 
+  it('a bigger work area keeps him home, even when the app syncs the old window x', () => {
+    const b = mkV();
+    b.tick(100);
+    b.setBounds(0, 1200);
+    b.setX(1000); // app.js reads the window, still at the old corner
+    let o = b.tick(100);
+    expect(o.state).toBe('home');
+    expect(o.x).toBe(1200);
+
+    // the same while he's yawning in the corner
+    const c = late();
+    c.tick(100);
+    c.wakeHere();
+    run(c, 59 * 1000, 1000);
+    for (let i = 0; i < 30 && (o = c.tick(100)).state !== 'dozing'; i++);
+    expect(o.state).toBe('dozing');
+    c.setBounds(0, 1200);
+    c.setX(1000);
+    o = run(c, 2000, 100).pop();
+    expect(o.state).toBe('home');
+    expect(o.x).toBe(1200);
+  });
+
+  it('a drag that ends while paused still puts him to bed at home', () => {
+    const b = mkV({ random: seeded(VISIT_SEED) });
+    let o;
+    for (let i = 0; i < 300 && (o = b.tick(1000)).state !== 'idle'; i++);
+    b.pointerDown(0, 0);
+    b.pointerMove(20, 0);
+    b.tick(100);
+    b.setPaused(true);
+    expect(b.pointerUp()).toBe('drag');
+    b.setX(300);
+    b.setPaused(false);
+    o = b.tick(100);
+    expect(o.state).toBe('home');
+    expect(o.x).toBe(1000);
+    expect(run(b, 2 * MIN, 1000).every((x) => x.state === 'home')).toBe(true);
+  });
+
+  it('summon and wakeHere count as her being back, even before the idle poll catches up', () => {
+    for (const act of ['summon', 'wakeHere']) {
+      const b = late();
+      b.setSystemIdle(200); // stale: the next idle poll is up to 10 s away
+      b.tick(100);
+      b[act]();
+      const out = run(b, 3000, 100);
+      expect(out.every((o) => o.state !== 'dozing' && o.state !== 'homing' && o.state !== 'home')).toBe(true);
+    }
+  });
+
   it('evening visits are 30% shorter', () => {
     const longest = (phase) => {
       const b = mkV({ random: seeded(5) });

@@ -83,6 +83,7 @@ export function createBrain({
   let pendingRandom = false;
   let moveFrom = px; // where the current walk started, for easing
   let moveState = null;
+  let bedIsHome = false; // dozing off in the corner (vs. where he was dropped)
 
   const rand = (a, b) => a + random() * (b - a);
   const clamp = (v) => Math.min(hi, Math.max(lo, v));
@@ -115,6 +116,7 @@ export function createBrain({
   // yawn, then sleep
   function startDozing() {
     timedState = null;
+    bedIsHome = atHome();
     if (yawnMs > 0) {
       state = 'dozing';
       stateTimer = yawnMs;
@@ -133,6 +135,22 @@ export function createBrain({
     target = hi;
     facing = target > px ? 'right' : 'left';
     state = 'homing';
+  }
+
+  // Settled in the corner: home is always the corner, wherever the window is.
+  function pinnedHome() {
+    return state === 'home' || (state === 'dozing' && bedIsHome);
+  }
+
+  // Straight to bed at home (Pause), ending any visit.
+  function bedAtHome() {
+    if (onVisit) endVisit();
+    awakeLeft = 0;
+    timedState = null;
+    sleepMoment = null;
+    px = hi;
+    target = hi;
+    state = 'home';
   }
 
   function startWalk() {
@@ -430,8 +448,12 @@ export function createBrain({
       downWasAsleep = false;
       wake();
       if (wasDrag) {
-        if (paused) enterIdle();
-        else if (visits && phase === 'night' && !onVisit) startDozing(); // back to sleep where he lands
+        if (paused && visits) bedAtHome();
+        else if (paused) enterIdle();
+        else if (visits && phase === 'night' && !onVisit) {
+          startDozing(); // back to sleep where he lands
+          bedIsHome = false; // px is stale until the app's setX after the drop
+        }
         else {
           enterIdle();
           if (visits && !onVisit) awakeLeft = NAP_WAKE_MS;
@@ -457,6 +479,7 @@ export function createBrain({
     // Wake in place (a click, a treat, the tray): up for NAP_WAKE_MS, then home.
     wakeHere() {
       if (paused || state === 'drag') return;
+      wake(); // always her doing, so she's at the PC
       wakeHere();
     },
 
@@ -468,6 +491,7 @@ export function createBrain({
     // a wave if he's already up.
     summon() {
       if (paused || state === 'drag') return;
+      wake(); // she just used the tray
       if (ASLEEP.has(state) && visits && phase === 'night') {
         playMoment('sleep-peek', peekMs); // he only peeks at night
         return;
@@ -498,27 +522,22 @@ export function createBrain({
       pendingRandom = false;
       sleepMoment = null;
       if (state === 'drag') return; // pointerUp settles him
-      if (visits) {
-        if (onVisit) endVisit();
-        awakeLeft = 0;
-        timedState = null;
-        px = hi;
-        target = hi;
-        state = 'home';
-      } else enterIdle();
+      if (visits) bedAtHome();
+      else enterIdle();
     },
 
     setBounds(a, b) {
       lo = a;
       hi = Math.max(a, b);
-      if (state === 'home') px = hi; // home is always the corner
-      px = clamp(px);
+      px = pinnedHome() ? hi : clamp(px); // home is always the corner
       target = state === 'homing' ? hi : clamp(target);
       if (ASLEEP.has(state)) state = atHome() ? 'home' : 'sleep';
     },
 
+    // Where the window really is (after a drop, or a resync). A bear settled
+    // in the corner stays there; the window follows him.
     setX(v) {
-      px = clamp(v);
+      px = pinnedHome() ? hi : clamp(v);
       if (ASLEEP.has(state)) state = atHome() ? 'home' : 'sleep';
     },
   };
