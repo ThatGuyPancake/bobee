@@ -51,6 +51,8 @@ The animations:
 | `wave` | 6 | holds the mug in one paw and waves hello with the other (when he wakes for a visit, or from the tray's Say something) |
 | `sip` | 6 | lifts the mug and sips, eyes closed (now and then while idle) |
 | `yawn` | 6 | stretches tall with a big yawn (when he wakes up for a visit, and before he falls asleep) |
+| `pet` | 6 | eyes closed and blushing, leans into the stroke, hearts float up (when you pet him while he's awake) |
+| `sleep-pet` | 4 | smiles in his sleep with a little wiggle and one heart, without waking (when you pet him while he's asleep) |
 
 Breathing, squash and stretch, the walk bob, the hover wiggle and the drag tilt are added on top in code by `renderer/motion.js`, so the frames themselves keep his body still.
 
@@ -64,7 +66,7 @@ Breathing, squash and stretch, the walk bob, the hover wiggle and the drag tilt 
 
 ```json
 {
-  "fps": { "idle": 4, "walk": 9, "sleep": 2, "drag": 8, "happy": 9, "wave": 8, "sip": 5, "yawn": 5 }
+  "fps": { "idle": 4, "walk": 9, "sleep": 2, "drag": 8, "happy": 9, "wave": 8, "sip": 5, "yawn": 5, "pet": 7, "sleep-pet": 4 }
 }
 ```
 

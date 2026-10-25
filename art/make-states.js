@@ -590,6 +590,44 @@ S.yawn = [
   return place(b);
 });
 
+// a small outlined heart, 7x5 (for sleep-pet, where a Z would be)
+function smallHeart(b, x, y) {
+  const p = ['.OO.OO.', 'OppOppO', 'OpwpppO', '.OpppO.', '..OOO..'];
+  const k = { O: C.out, p: C.tongue, w: C.white };
+  p.forEach((r, j) => [...r].forEach((ch, i) => k[ch] && b.set(x + i, y + j, k[ch])));
+}
+// a closed, content smile under the nose (no open mouth), for when he's asleep
+function sleepSmile(b, oy = 0, ox = 0) {
+  clearMouth(b, oy, ox);
+  paint(b, [[44, 48], [45, 49], [46, 50], [47, 50], [48, 50], [49, 50], [50, 50], [51, 49], [52, 48]], C.out, ox, oy);
+}
+
+// pet: eyes closed and blushing, he leans into the stroke and back; hearts float up
+S.pet = [0, 1, 1, 1, 1, 0].map((lean, i) => {
+  let b = removeSteam(canvas());
+  b = moveHead(b, lean, 0);
+  eyes(b, 'closed', 0, lean);
+  blush(b, 0, lean);
+  steam(b, i / 6);
+  const f = place(b);
+  // the first heart rises from beside his ear, a second one follows it
+  if (i >= 1) heart(f, 77 + (i >> 1), 26 - (i - 1) * 4);
+  if (i >= 3) heart(f, 85, 26 - (i - 3) * 4);
+  return f;
+});
+
+// sleep-pet: still asleep, he smiles, wiggles a little, and one heart rises instead of a Z
+S['sleep-pet'] = [0, 1, 0, -1].map((wig, i) => {
+  let b = removeSteam(canvas());
+  b = moveHead(b, wig, 0);
+  eyes(b, 'closed', 0, wig);
+  sleepSmile(b, 0, wig);
+  const f = place(b);
+  const oy = shiftOf(b);
+  smallHeart(f, 78, oy + 20 - i * 4);
+  return f;
+});
+
 // ---------- write ----------
 function strip(name, frames) {
   const s = new Img(F * frames.length, F);
@@ -600,7 +638,7 @@ function strip(name, frames) {
 for (const k of Object.keys(S)) strip(k, S[k]);
 
 if (PREVIEW) {
-  const rows = ['idle', 'walk', 'sleep', 'drag', 'happy', 'wave', 'sip', 'yawn'];
+  const rows = ['idle', 'walk', 'sleep', 'drag', 'happy', 'wave', 'sip', 'yawn', 'pet', 'sleep-pet'];
   const Z = 4;
   const cols = Math.max(...rows.map((r) => S[r].length));
   const pv = new Img(F * cols * Z, F * rows.length * Z);

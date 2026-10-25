@@ -32,7 +32,7 @@ describe('frameIndex', () => {
 describe('animations', () => {
   it('registers every strip with a frame rate', async () => {
     const { NAMES, DEFAULT_FPS } = await import('../renderer/sprite.js');
-    for (const n of ['idle', 'walk', 'sleep', 'drag', 'happy', 'wave', 'sip', 'yawn']) {
+    for (const n of ['idle', 'walk', 'sleep', 'drag', 'happy', 'wave', 'sip', 'yawn', 'pet', 'sleep-pet']) {
       expect(NAMES).toContain(n);
       expect(DEFAULT_FPS[n]).toBeGreaterThan(0);
     }
