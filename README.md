@@ -102,3 +102,4 @@ If the file is broken (a missing comma, say), the built-in defaults are used. Em
 Use Windows Settings > Apps > Installed apps > Bobee > Uninstall, or run the uninstaller from `%LOCALAPPDATA%\Programs\bobee`.
 
 In the installed app, Bobee is set to start with Windows the first time it runs. You can turn that off any time from the tray icon menu: untick **Start with Windows**. The same menu has Pause/Resume, Say something and Quit.
+`sleep-peek` (4 frames): one eye opens at night, then back to sleep. `munch` (6 frames): a cookie, chewing, crumbs and a happy face.
