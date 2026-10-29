@@ -49,6 +49,10 @@ export class SpritePlayer {
     this.override = null;
   }
 
+  setOverlay(fn) {
+    this.overlay = typeof fn === 'function' ? fn : null;
+  }
+
   async load(fpsOverrides = {}) {
     for (const name of NAMES) {
       const img =
@@ -145,6 +149,9 @@ export class SpritePlayer {
       dw,
       dh
     );
+    if (this.overlay && !this.override && strip.frameWidth === 96 && strip.frameHeight === 96) {
+      this.overlay(ctx, { animation: this.current, frame: idx, dx, dy, scale });
+    }
     ctx.restore();
   }
 

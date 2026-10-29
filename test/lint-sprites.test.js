@@ -67,3 +67,48 @@ describe('Bobee sprites', () => {
     });
   }
 });
+
+// Prop discovery and generated anchors are part of the shipped art contract.
+it('discovers all eight outfit props for lint', () => {
+  const names = ['santa-hat', 'party-hat', 'heart-clip', 'bunny-ears', 'flower-crown', 'pumpkin-hat', 'scarf', 'sunglasses'];
+  const files = defaultFiles();
+  for (const name of names) expect(files.some(f => f.endsWith(path.join('props', name + '.png')))).toBe(true);
+});
+it('has an in-frame head anchor for every generated sprite frame', async () => {
+  const fs = await import('node:fs');
+  const { PNG } = await import('pngjs');
+  const { NAMES } = await import('../renderer/sprite.js');
+  const anchors = JSON.parse(fs.readFileSync(new URL('../assets/bobee/anchors.json', import.meta.url)));
+  for (const name of NAMES) {
+    const png = PNG.sync.read(fs.readFileSync(new URL('../assets/bobee/' + name + '.png', import.meta.url)));
+    expect(anchors[name]).toHaveLength(png.width / 96);
+    for (const point of anchors[name]) {
+      expect(point).toHaveLength(2);
+      for (const v of point) { expect(Number.isInteger(v)).toBe(true); expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThan(96); }
+    }
+  }
+  expect(anchors.pet[1][0] - anchors.pet[0][0]).toBe(1);
+  expect(anchors['sleep-pet'][3][0] - anchors['sleep-pet'][0][0]).toBe(-1);
+});
+it('keeps every outfit prop inside every anchored animation frame', async () => {
+  const fs = await import('node:fs'); const { PNG } = await import('pngjs');
+  const anchors = JSON.parse(fs.readFileSync('assets/bobee/anchors.json'));
+  const props = JSON.parse(fs.readFileSync('assets/props/props.json'));
+  for(const [name, {pivot}] of Object.entries(props)) {
+    const p = PNG.sync.read(fs.readFileSync('assets/props/'+name+'.png'));
+    for(const points of Object.values(anchors)) for(const [ax,ay] of points) {
+      for(let y=0;y<96;y++) for(let x=0;x<96;x++) if(p.data[(y*96+x)*4+3]) {
+        expect(x+ax-pivot[0],name).toBeGreaterThanOrEqual(0); expect(x+ax-pivot[0],name).toBeLessThan(96);
+        expect(y+ay-pivot[1],name).toBeGreaterThanOrEqual(0); expect(y+ay-pivot[1],name).toBeLessThan(96);
+      }
+    }
+  }
+});
+it('Halloween mask covers the muzzle and summer sunglasses include a hat', async () => {
+  const fs=await import('node:fs'); const {PNG}=await import('pngjs');
+  const props=JSON.parse(fs.readFileSync('assets/props/props.json'));
+  const alphaAt=(name,x,y)=>{const p=PNG.sync.read(fs.readFileSync('assets/props/'+name+'.png')); const [px,py]=props[name].pivot; return p.data[((y-15+py)*96+x-48+px)*4+3];};
+  expect(alphaAt('pumpkin-hat',48,50)).toBe(255);
+  expect(alphaAt('pumpkin-hat',30,40)).toBe(255);
+  expect(alphaAt('sunglasses',48,20)).toBe(255);
+});

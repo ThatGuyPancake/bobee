@@ -236,6 +236,15 @@ function buildTrayMenu() {
     },
     { label: 'Say something', click: () => sendCommand('say') },
     {
+      label: 'Outfits',
+      type: 'checkbox',
+      checked: store.get().outfits,
+      click: (item) => {
+        store.patch({ outfits: item.checked });
+        sendCommand(item.checked ? 'outfits-on' : 'outfits-off');
+      },
+    },
+    {
       label: 'Start with Windows',
       type: 'checkbox',
       checked: app.isPackaged && app.getLoginItemSettings().openAtLogin,

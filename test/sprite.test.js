@@ -41,3 +41,23 @@ describe('animations', () => {
   });
 });
 
+
+it('draws overlays after the sprite inside the mirrored transform, then disables them', async () => {
+  const {SpritePlayer}=await import('../renderer/sprite.js');
+  const calls=[]; const ctx=Object.fromEntries(['clearRect','save','restore','translate','scale','drawImage'].map(k=>[k,(...a)=>calls.push([k,...a])]));
+  const player=new SpritePlayer({getContext:()=>ctx});
+  player.strips.idle={img:{},count:8,frameWidth:96,frameHeight:96,fps:4};
+  player.setFacing('left'); player.setOverlay((c,info)=>calls.push(['overlay',info]));
+  player.draw(100); calls.length=0; player.draw(600);
+  expect(calls.map(c=>c[0])).toEqual(['clearRect','save','translate','scale','drawImage','overlay','restore']);
+  expect(calls.find(c=>c[0]==='overlay')[1]).toEqual({animation:'idle',frame:frameIndex(500,4,8),dx:0,dy:0,scale:1});
+  player.setOverlay(null); calls.length=0; player.draw(700); expect(calls.some(c=>c[0]==='overlay')).toBe(false);
+});
+it('does not dress placeholder or override art with unrelated head anchors', async () => {
+  const {SpritePlayer}=await import('../renderer/sprite.js');
+  let count=0; const ctx=Object.fromEntries(['clearRect','save','restore','translate','scale','drawImage'].map(k=>[k,()=>{}]));
+  const player=new SpritePlayer({getContext:()=>ctx}); player.setOverlay(()=>count++);
+  player.strips.idle={img:{},count:8,frameWidth:64,frameHeight:64,fps:4}; player.draw(0);
+  player.playOverride({width:96,height:96},{durationMs:1000}); player.draw(10);
+  expect(count).toBe(0);
+});

@@ -6,6 +6,7 @@ import { createMotion, toTransform } from './motion.js';
 import { createPetting, petMoment } from './petting.js';
 import { visitReaction } from './rhythm.js';
 import { createMood, phaseOf } from './mood.js';
+import { outfitFor, createOutfitLayer } from './outfits.js';
 
 // strips with lettering (the sleep Zs), which must not be mirrored
 const NO_MIRROR = new Set(['sleep', 'yawn', 'sleep-peek', 'sleep-pet']);
@@ -63,6 +64,38 @@ async function main() {
   const player = new SpritePlayer(canvas);
   await player.load(fps);
 
+  let outfitsEnabled = savedState.outfits;
+  let outfitLayer = null;
+  let outfitDay = null;
+  const loadPropImage = (url) => new Promise(resolve => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+  try {
+    const [anchorsText, propsText] = await Promise.all([
+      fetchText('/assets/bobee/anchors.json'), fetchText('/assets/props/props.json'),
+    ]);
+    if (!anchorsText || !propsText) throw new Error('missing outfit metadata');
+    const anchors = JSON.parse(anchorsText), props = JSON.parse(propsText);
+    if (!anchors || typeof anchors !== 'object' || !props || typeof props !== 'object') throw new Error('invalid outfit metadata');
+    const entries = await Promise.all(Object.keys(props).map(async name => [name, await loadPropImage('/assets/props/' + name + '.png')]));
+    if (entries.some(([, image]) => !image)) throw new Error('missing outfit image');
+    outfitLayer = createOutfitLayer({ anchors, props, images: Object.fromEntries(entries) });
+    player.setOverlay((ctx, info) => outfitLayer.draw(ctx, info));
+  } catch (error) {
+    console.warn('[bobee] outfits unavailable:', error.message);
+  }
+  function updateOutfits(force = false) {
+    const date = now(), day = date.toDateString();
+    if (!force && day === outfitDay) return;
+    outfitDay = day;
+    outfitLayer?.set(outfitsEnabled ? outfitFor(date) : null);
+  }
+  updateOutfits();
+
+
   // Squash, bob, breathing, wiggle and tilt on top of the frame animations.
   const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   const motion = createMotion({ size: canvas.offsetHeight || 96, reduced: reducedQuery.matches });
@@ -118,7 +151,7 @@ async function main() {
     const token = ++visitToken;
     const state = await window.bobee.getState();
     if (token !== visitToken || paused) return;
-    pendingGreeting = visitReaction(state, phaseOf(now()));
+    pendingGreeting = visitReaction({ ...state, outfits: outfitsEnabled && !!outfitLayer }, phaseOf(now()), Math.random, outfitFor(now()).messages);
     if (pendingGreeting) {
       window.bobee.patchState(pendingGreeting.patch);
       skipFirstRandom = true;
@@ -157,7 +190,14 @@ async function main() {
     await syncX();
   });
   window.bobee.onCommand((c) => {
-    if (c === 'system-resume') {
+    if (c === 'outfits-on' || c === 'outfits-off') {
+      outfitsEnabled = c === 'outfits-on';
+      updateOutfits(true);
+      if (!outfitsEnabled && pendingGreeting && outfitFor(now()).messages.includes(pendingGreeting.group)) {
+        pendingGreeting = null;
+        skipFirstRandom = false;
+      }
+    } else if (c === 'system-resume') {
       visitToken++;
       pendingGreeting = null;
       skipFirstRandom = false;
@@ -169,6 +209,7 @@ async function main() {
       stopTalking();
       brain.resumeFromSleep();
       updatePhase();
+      updateOutfits(true);
       saveMood();
       // Refresh daily fields now; visit-start also reads a fresh store snapshot.
       window.bobee.getState().catch((e) => console.error('[bobee] resume state', e));
@@ -305,6 +346,8 @@ async function main() {
     player.setFacing(NO_MIRROR.has(out.animation) ? 'right' : out.facing);
     lastState = out.state;
     if (out.bubble && !paused) showBubble(out.bubble);
+    updateOutfits();
+    outfitLayer?.blush(mood.level(Date.now()) !== 'content' && out.animation === 'idle' && Math.floor(now / 250) % 20 === 0);
     player.draw(now);
     const m = motion.update(now, { animation: out.animation, dx: out.dx, dragging: out.state === 'drag' });
     const tf = toTransform(m);

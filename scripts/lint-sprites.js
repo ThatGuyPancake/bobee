@@ -72,7 +72,7 @@ function lintFile(file) {
 function defaultFiles(root = path.join(__dirname, '..')) {
   const list = (dir, re) =>
     fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => re.test(f)).sort().map((f) => path.join(dir, f)) : [];
-  return [...list(path.join(root, 'assets', 'bobee'), /\.png$/), ...list(path.join(root, 'art'), /^bobee-master.*\.png$/)];
+  return [...list(path.join(root, 'assets', 'bobee'), /\.png$/), ...list(path.join(root, 'assets', 'props'), /\.png$/), ...list(path.join(root, 'art'), /^bobee-master.*\.png$/)];
 }
 
 if (require.main === module) {

@@ -12,3 +12,12 @@ it('chooses an evening line half the time, with no greeting at night or by day',
   expect(visitReaction({}, 'night')).toBe(null);
   expect(visitReaction({}, 'day')).toBe(null);
 });
+
+it('gives morning priority then one unsaid holiday per visit, honoring the saved toggle',()=>{
+  const state={said:[],outfits:true,lunchSnack:false};
+  expect(visitReaction(state,'morning',()=>1,['christmas','winter']).group).toBe('morning');
+  expect(visitReaction({...state,said:['morning']},'morning',()=>1,['christmas','winter'])).toEqual({group:'christmas',patch:{said:['morning','christmas']},munch:false});
+  expect(visitReaction({...state,said:['christmas']},'day',()=>1,['christmas','winter']).group).toBe('winter');
+  expect(visitReaction({...state,said:['christmas','winter']},'day',()=>1,['christmas','winter'])).toBe(null);
+  expect(visitReaction({...state,outfits:false},'day',()=>1,['christmas'])).toBe(null);
+});
