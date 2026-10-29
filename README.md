@@ -7,6 +7,8 @@ A tiny pixel-art bear who lives on your Windows desktop. He naps in the bottom-r
 - **Home.** Most of the time Bobee is asleep in the bottom-right corner of the main screen, feet on the taskbar. He never blocks clicks: only his own pixels catch the mouse.
 - **Visits.** About six times an hour he wakes up with a yawn, waves, wanders, sips his coffee and says something now and then. That adds up to about 10 minutes an hour. When the visit is over he walks back to the corner, yawns and goes back to sleep.
 - **Waking him.** Click him and he wakes up right where he is, stays up for a minute, then walks home and dozes off. Clicking him on his way home wakes him again. You can drag him anywhere; after a minute he walks back home.
+- **Mood.** Pets (+2), clicks (+1) and treats (+8) make him happier: more hops, sweeter lines, and little waves when overjoyed. He gently settles back with a three-hour half-life, never below his content resting mood.
+- **Daily rhythm.** A morning coffee hello (06–11), one lunch snack (12–14), and shorter, sleepier evening visits (20–24). No visits at night. All times follow your local clock.
 - **Petting.** Move the mouse back and forth over him a few times and he blushes, leans into it and little hearts float up. If he's asleep he smiles in his sleep and sleeps on. He can be petted again after a few seconds.
 - **Say something** (tray menu) wakes him for a short visit with a wave.
 - **Away from the PC.** While the screen is idle or locked he stays asleep at home, and visits wait until you're back.

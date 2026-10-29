@@ -4,7 +4,8 @@ import { createBrain } from './brain.js';
 import { createBubble } from './bubble.js';
 import { createMotion, toTransform } from './motion.js';
 import { createPetting, petMoment } from './petting.js';
-import { phaseOf } from './mood.js';
+import { visitReaction } from './rhythm.js';
+import { createMood, phaseOf } from './mood.js';
 
 // strips with lettering (the sleep Zs), which must not be mirrored
 const NO_MIRROR = new Set(['sleep', 'yawn', 'sleep-peek', 'sleep-pet']);
@@ -32,6 +33,20 @@ async function main() {
   const useDebug = !!debugStart && !Number.isNaN(debugStart.getTime());
   if (config.debugDate && !useDebug) console.warn('[bobee] BOBEE_DATE is not a date:', config.debugDate);
   const now = () => (useDebug ? new Date(debugStart.getTime() + (performance.now() - debugAt)) : new Date());
+
+  const savedState = await window.bobee.getState();
+  const mood = createMood(savedState, Date.now());
+  let lastSavedMood = savedState.happiness;
+  function saveMood() {
+    const snapshot = mood.snapshot(Date.now());
+    lastSavedMood = snapshot.happiness;
+    window.bobee.patchState(snapshot);
+  }
+  function addMood(kind) {
+    mood.add(kind, Date.now());
+    brain.setMood(mood.level(Date.now()));
+    saveMood();
+  }
 
   const picker = createPicker(parseMessages(await fetchText('/messages.json')));
   let fps = {};
@@ -70,7 +85,11 @@ async function main() {
   });
 
   // morning, day, night...: checked once a minute
-  const updatePhase = () => brain.setPhase(phaseOf(now()));
+  const updatePhase = () => {
+    brain.setPhase(phaseOf(now()));
+    brain.setMood(mood.level(Date.now()));
+    if (Math.abs(mood.value(Date.now()) - lastSavedMood) >= 0.5) saveMood();
+  };
   updatePhase();
   setInterval(updatePhase, 60 * 1000);
 
@@ -91,9 +110,27 @@ async function main() {
     bubble.hide();
   }
 
+  const randomLine = () => picker.nextRandom({ sweetWeight: mood.level(Date.now()) === 'content' ? 1 : 2 });
+  let visitToken = 0;
+  let pendingGreeting = null;
+  let skipFirstRandom = false;
+  async function startGreeting() {
+    const token = ++visitToken;
+    const state = await window.bobee.getState();
+    if (token !== visitToken || paused) return;
+    pendingGreeting = visitReaction(state, phaseOf(now()));
+    if (pendingGreeting) {
+      window.bobee.patchState(pendingGreeting.patch);
+      skipFirstRandom = true;
+    }
+  }
+
   function showBubble(kind) {
     if (kind === 'click') say(picker.nextClick());
-    else if (kind === 'random') say(picker.nextRandom());
+    else if (kind === 'random') {
+      if (skipFirstRandom) skipFirstRandom = false;
+      else say(randomLine());
+    }
     else if (kind === 'onfire') say(["you're on fire 🔥"]);
   }
 
@@ -122,6 +159,9 @@ async function main() {
   window.bobee.onCommand((c) => {
     if (c === 'pause') {
       paused = true;
+      visitToken++;
+      pendingGreeting = null;
+      skipFirstRandom = false;
       wrap.classList.add('away');
       stopTalking();
       setThrough(true);
@@ -133,7 +173,7 @@ async function main() {
       if (lastState !== 'home') brain.setX(bounds.maxX);
     } else if (c === 'say' && !paused) {
       brain.summon(); // wakes him for a short visit if he's asleep
-      say(picker.nextRandom());
+      say(randomLine());
     }
   });
 
@@ -179,6 +219,7 @@ async function main() {
     if (petting.sample(e.screenX, performance.now(), onBear, e.buttons !== 0)) {
       const name = petMoment(lastState);
       brain.moment(name, player.durationOf(name, 1));
+      addMood('pet');
     }
     hovering = over;
     setThrough(!over);
@@ -201,6 +242,7 @@ async function main() {
     lastMove = null;
     const wasAsleep = lastState === 'home' || lastState === 'sleep';
     const result = brain.pointerUp();
+    if (result === 'click' && !paused) addMood('click');
     const wasMoved = moved;
     moved = false;
     if (result === 'drag' || wasMoved) {
@@ -227,6 +269,21 @@ async function main() {
         window.bobee.moveBy(winX - x, 0);
         x = winX;
       }
+    }
+    if (out.event === 'visit-start') {
+      skipFirstRandom = false;
+      startGreeting().catch((e) => console.error('[bobee] greeting', e));
+    } else if (out.event === 'visit-end') {
+      visitToken++;
+      pendingGreeting = null;
+      skipFirstRandom = false;
+    }
+    // Let the wake-up yawn and wave finish before eating or greeting.
+    if (pendingGreeting && (out.state === 'idle' || out.state === 'walk')) {
+      const greeting = pendingGreeting;
+      pendingGreeting = null;
+      if (greeting.munch) brain.moment('munch', player.durationOf('munch', 2));
+      say(picker.next(greeting.group));
     }
     player.play(out.animation);
     // the sleep Zs are lettering, so don't mirror him while he yawns and sleeps
