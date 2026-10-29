@@ -40,10 +40,24 @@ piece('flower-crown','hat',[48,31],im=>{
   rect(im,30,30,37,3,green);
   for(const x of [33,43,53,63]) { rect(im,x-2,26,5,8,C.cream); rect(im,x-4,28,9,4,pink); rect(im,x-1,29,3,3,gold); }
 });
-piece('pumpkin-hat','hat',[48,23],im=>{
-  rect(im,47,15,4,6,green);
-  for(let y=21;y<33;y++) { const inset=y<24?24-y:y>30?y-30:0; rect(im,34+inset,y,29-2*inset,1,orange); }
-  rect(im,43,24,2,3,C.out); rect(im,54,24,2,3,C.out); rect(im,46,29,7,2,gold);
+// Full jack-o'-lantern mask; keep the existing calendar prop name.
+piece('pumpkin-hat','hat',[48,15],im=>{
+  const shade=[187,87,38], glow=[255,213,101];
+  rect(im,47,10,5,9,green); rect(im,51,10,5,3,green);
+  for(let y=15;y<=62;y++) for(let x=19;x<=77;x++) {
+    if(((x-48)/29)**2+((y-38)/24)**2<0.98) {
+      const rib=Math.abs(x-48)>19 || Math.abs(x-48)<2;
+      im.set(x,y,rib?shade:orange);
+    }
+  }
+  // Carved triangular eyes and nose, with a warm interior.
+  for(const cx of [36,60]) for(let row=0;row<8;row++) rect(im,cx-Math.floor(row*.65),29+row,Math.floor(row*.65)*2+1,1,glow);
+  for(let row=0;row<5;row++) rect(im,48-Math.floor(row/2),39+row,Math.floor(row/2)*2+1,1,glow);
+  for(let y=48;y<=55;y++) {
+    const inset=y>52?(y-52)*2:0; rect(im,32+inset,y,33-2*inset,1,C.out);
+  }
+  rect(im,35,49,27,3,glow); rect(im,40,52,17,2,glow);
+  rect(im,41,48,4,4,orange); rect(im,53,51,4,4,orange);
 });
 // Anchor is master [48,15]; jaw row 60 is +45, eyes row 42 is +27.
 // Negative pivots deliberately place these pieces below the head anchor.
@@ -52,9 +66,16 @@ piece('scarf','neck',[48,-13],im=>{
   for(let x=32;x<67;x+=5) rect(im,x,30,2,4,redShade);
   rect(im,58,40,6,2,gold); rect(im,58,46,6,2,gold);
 });
-piece('sunglasses','face',[48,3],im=>{
-  rect(im,29,28,17,9,C.dark); rect(im,51,28,17,9,C.dark); rect(im,45,29,7,3,C.dark);
-  rect(im,32,30,4,2,[109,146,160]); rect(im,54,30,4,2,[109,146,160]);
+// A tilted teal cap and shades share the awake-only summer prop.
+piece('sunglasses','face',[48,15],im=>{
+  const teal=[48,108,119], light=[73,143,151];
+  for(let y=9;y<=23;y++) {
+    const inset=y<14?14-y:0; rect(im,30+inset,y,34-inset,1,teal);
+  }
+  rect(im,31,19,33,4,light); rect(im,48,23,25,4,teal);
+  rect(im,39,12,3,4,gold); rect(im,37,13,7,2,gold);
+  rect(im,29,40,17,9,C.dark); rect(im,51,40,17,9,C.dark); rect(im,45,41,7,3,C.dark);
+  rect(im,32,42,4,2,[109,146,160]); rect(im,54,42,4,2,[109,146,160]);
 });
 fs.writeFileSync(path.join(dir,'props.json'),JSON.stringify(props,null,2)+'\n');
 const previewAt=process.argv.indexOf('--preview-props');
@@ -71,3 +92,4 @@ if(previewAt>=0) {
   writePng(process.argv[previewAt+1],out);
 }
 console.log('outfit props generated');
+

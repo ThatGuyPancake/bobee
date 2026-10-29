@@ -104,3 +104,11 @@ it('keeps every outfit prop inside every anchored animation frame', async () => 
     }
   }
 });
+it('Halloween mask covers the muzzle and summer sunglasses include a hat', async () => {
+  const fs=await import('node:fs'); const {PNG}=await import('pngjs');
+  const props=JSON.parse(fs.readFileSync('assets/props/props.json'));
+  const alphaAt=(name,x,y)=>{const p=PNG.sync.read(fs.readFileSync('assets/props/'+name+'.png')); const [px,py]=props[name].pivot; return p.data[((y-15+py)*96+x-48+px)*4+3];};
+  expect(alphaAt('pumpkin-hat',48,50)).toBe(255);
+  expect(alphaAt('pumpkin-hat',30,40)).toBe(255);
+  expect(alphaAt('sunglasses',48,20)).toBe(255);
+});
