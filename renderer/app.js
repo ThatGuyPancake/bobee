@@ -4,6 +4,7 @@ import { createBrain } from './brain.js';
 import { createBubble } from './bubble.js';
 import { createMotion, toTransform } from './motion.js';
 import { createPetting, petMoment } from './petting.js';
+import { createTreatReaction } from './treats.js';
 import { visitReaction } from './rhythm.js';
 import { createMood, phaseOf } from './mood.js';
 import { outfitFor, createOutfitLayer } from './outfits.js';
@@ -167,6 +168,22 @@ async function main() {
     else if (kind === 'onfire') say(["you're on fire 🔥"]);
   }
 
+  const treats = createTreatReaction({
+    munchMs: player.durationOf('munch', 1) || 750,
+    happyMs: player.durationOf('happy', 2) || 750,
+    wake: () => brain.wakeHere(), moment: (name, ms) => brain.moment(name, ms),
+    say: group => say(picker.next(group)), addMood: () => addMood('treat'),
+  });
+  window.bobee.onJar(({ event }) => {
+    if (paused) return;
+    if (event === 'appear' && !['home', 'sleep'].includes(lastState)) say(picker.next('treat'));
+    if (event === 'empty') treats.empty();
+  });
+  window.bobee.onTreatEaten(() => {
+    if (paused) return;
+    visitToken++; pendingGreeting = null; skipFirstRandom = false;
+    treats.eat(performance.now());
+  });
   let lastState = 'idle';
   window.__bobee = {
     state: () => lastState, // for debugging: what he's doing right now
@@ -198,6 +215,7 @@ async function main() {
         skipFirstRandom = false;
       }
     } else if (c === 'system-resume') {
+      treats.cancel();
       visitToken++;
       pendingGreeting = null;
       skipFirstRandom = false;
@@ -215,6 +233,7 @@ async function main() {
       window.bobee.getState().catch((e) => console.error('[bobee] resume state', e));
     } else if (c === 'pause') {
       paused = true;
+      treats.cancel();
       visitToken++;
       pendingGreeting = null;
       skipFirstRandom = false;
@@ -317,6 +336,7 @@ async function main() {
   function frame(now) {
     const dt = Math.min(now - last, 100);
     last = now;
+    treats.tick(now);
     const out = brain.tick(dt);
     // The window follows Bobee; he always stays on screen.
     if (!pressed && !syncing) {
@@ -345,7 +365,7 @@ async function main() {
     // the sleep Zs are lettering, so don't mirror him while he yawns and sleeps
     player.setFacing(NO_MIRROR.has(out.animation) ? 'right' : out.facing);
     lastState = out.state;
-    if (out.bubble && !paused) showBubble(out.bubble);
+    if (out.bubble && !paused && !treats.active()) showBubble(out.bubble);
     updateOutfits();
     outfitLayer?.blush(mood.level(Date.now()) !== 'content' && out.animation === 'idle' && Math.floor(now / 250) % 20 === 0);
     player.draw(now);

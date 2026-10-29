@@ -5,6 +5,7 @@ const { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, protocol, 
 const { presenceFrom } = require('./lib/presence');
 const { resolveSafePath } = require('./lib/appPath');
 const { createStore } = require('./lib/store');
+const { createJarWindows } = require('./lib/jarWindows');
 
 const SIZE = 200;
 // How far Bobee's window sinks past the work area, so he sits on the taskbar.
@@ -39,6 +40,9 @@ let idleTimer = null;
 let hook = null;
 let tray = null; // module-level reference so the Tray is not garbage collected
 let paused = false;
+let jars = null;
+let jarTimer = null;
+let debugJarTimer = null;
 let store = null; // saved state (bobee-state.json), created once the app is ready
 
 const num = (...vals) => vals.every((v) => typeof v === 'number' && Number.isFinite(v));
@@ -128,6 +132,10 @@ function createWindow() {
 
 function registerIpc() {
   const trusted = (e) => !!win && !win.isDestroyed() && e.sender === win.webContents;
+  ipcMain.on('jar-grab', e => jars?.grab(e.sender));
+  ipcMain.on('jar-release', (e, cancel) => jars?.release(e.sender, cancel === true));
+  ipcMain.on('jar-click-through', (e, on) => jars?.clickThrough(e.sender, on === true));
+  ipcMain.on('jar-asset-failed', e => jars?.assetFailed(e.sender));
   ipcMain.on('move-by', (e, dx, dy) => {
     if (!trusted(e) || !num(dx, dy)) return;
     const b = win.getBounds();
@@ -179,6 +187,7 @@ function startIdlePoll() {
   idleTimer = setInterval(() => {
     const secs = powerMonitor.getSystemIdleTime();
     presence = presenceFrom(secs);
+    if (presence !== 'active') jars?.close();
     if (win && !win.isDestroyed()) win.webContents.send('idle', secs);
   }, 10000);
 }
@@ -187,7 +196,9 @@ function startHook() {
   try {
     const { uIOhook } = require('uiohook-napi');
     // Pulse only: the event argument is deliberately never read.
+    uIOhook.on('mouseup', () => { jars?.release(null); });
     uIOhook.on('keydown', () => {
+      jars?.cancelDrag();
       if (win && !win.isDestroyed()) win.webContents.send('key-pulse');
     });
     uIOhook.start();
@@ -230,6 +241,7 @@ function buildTrayMenu() {
       label: paused ? 'Resume' : 'Pause',
       click: () => {
         paused = !paused;
+        if (paused) jars?.close();
         sendCommand(paused ? 'pause' : 'resume');
         tray.setContextMenu(buildTrayMenu());
       },
@@ -282,22 +294,44 @@ if (gotLock) app.whenReady().then(() => {
   registerIpc();
   createWindow();
   startIdlePoll();
-  powerMonitor.on('resume', () => sendCommand('system-resume'));
+  jars = createJarWindows({
+    BrowserWindow, screen, base: __dirname, getArea: workArea,
+    getBobee: () => win && !win.isDestroyed() ? (() => {
+      const b = win.getBounds();
+      // Message bubbles enlarge the window above him; his 96px sprite remains centered at the bottom.
+      return { x: b.x + (b.width - 96) / 2, y: b.y + b.height - 96, width: 96, height: 96 };
+    })() : null,
+    getState: () => store.get(), patchState: p => store.patch(p),
+    send: (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); },
+    active: () => !paused && presence === 'active' && presenceFrom(powerMonitor.getSystemIdleTime()) === 'active',
+  });
+  jarTimer = setInterval(() => jars.check(), 60000);
+  jars.check();
+  if (!app.isPackaged && process.env.BOBEE_JAR_NOW === '1') debugJarTimer = setTimeout(() => jars.show(), 5000);
+  powerMonitor.on('suspend', () => jars.close());
+  powerMonitor.on('lock-screen', () => jars.close());
+  powerMonitor.on('resume', () => { jars.close(); sendCommand('system-resume'); });
   startHook();
   initAutostart();
   createTray();
 
   const onMetrics = () => {
     if (!win) return;
+    jars?.close();
     fx = win.getBounds().x;
     dropToFloor();
     sendBounds();
   };
   screen.on('display-metrics-changed', onMetrics);
+  screen.on('display-removed', onMetrics);
+  screen.on('display-added', onMetrics);
 });
 
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => { jars?.close(false); });
 app.on('will-quit', () => {
+  clearInterval(jarTimer);
+  clearTimeout(debugJarTimer);
   if (idleTimer) clearInterval(idleTimer);
   if (store) store.flush();
   if (tray) { tray.destroy(); tray = null; }
