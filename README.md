@@ -105,3 +105,22 @@ Use Windows Settings > Apps > Installed apps > Bobee > Uninstall, or run the uni
 
 In the installed app, Bobee is set to start with Windows the first time it runs. You can turn that off any time from the tray icon menu: untick **Start with Windows**. The same menu has Pause/Resume, Say something and Quit.
 `sleep-peek` (4 frames): one eye opens at night, then back to sleep. `munch` (6 frames): a cookie, chewing, crumbs and a happy face.
+
+### Seasonal outfits (v1.4.3)
+
+Bobee dresses for the local date automatically. The tray's **Outfits** checkbox saves your preference and switches seasonal greetings off. Morning greetings take priority; each seasonal greeting is said at most once per day.
+
+| Dates (inclusive) | Outfit |
+| --- | --- |
+| December 1–February 28/29 | Red scarf |
+| December 1–26 | Santa hat |
+| December 31–January 1 | Party hat and confetti |
+| February 14 | Heart clip |
+| Good Friday–Easter Monday | Bunny ears |
+| March 20–May 31 | Flower crown (Easter takes priority) |
+| June 21–August 31 | Sunglasses and teal cap, removed during sleep and yawns |
+| October 24–31 | Jack-o’-lantern face mask |
+
+Outfits follow every animation and facing direction. Missing outfit assets leave Bobee running without outfits. In development, `BOBEE_DATE` can preview a date; packaged builds use the real local clock.
+
+Art is drawn in code: `node art/make-states.js` writes sprite strips and head anchors, then `node art/make-props.js --preview-props outfits.png` writes props and a preview. Run `node scripts/lint-sprites.js` to check all art.

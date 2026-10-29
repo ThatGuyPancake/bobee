@@ -39,3 +39,32 @@ export function outfitFor(date) {
   }
   return out;
 }
+
+const HIDE_FACE = new Set(['sleep', 'sleep-pet', 'sleep-peek', 'yawn']);
+export function createOutfitLayer({ anchors, props, images }) {
+  let outfit = null, blushing = false;
+  return {
+    set(value) { outfit = value; },
+    blush(on) { blushing = !!on; },
+    draw(ctx, { animation, frame, dx, dy, scale }) {
+      const anchor = anchors[animation]?.[frame];
+      if (!Array.isArray(anchor) || anchor.length !== 2 || !anchor.every(Number.isFinite)) return;
+      const [ax, ay] = anchor;
+      if (blushing && animation === 'idle') {
+        ctx.fillStyle = 'rgb(214, 120, 110)';
+        // Master's cheek marks at x=31/61, y=47, relative to head [48,15].
+        for (const ox of [-17, 13]) ctx.fillRect(dx + (ax + ox) * scale, dy + (ay + 32) * scale, 4 * scale, 2 * scale);
+      }
+      for (const slot of ['neck', 'hat', 'face']) {
+        if (slot === 'face' && HIDE_FACE.has(animation)) continue;
+        const name = outfit?.[slot], prop = props[name], image = images[name];
+        if (!prop || !image || prop.slot !== slot || !Array.isArray(prop.pivot)) continue;
+        const [px, py] = prop.pivot;
+        if (![px, py].every(Number.isFinite)) continue;
+        ctx.drawImage(image, dx + (ax - px) * scale, dy + (ay - py) * scale,
+          (image.naturalWidth || image.width) * scale, (image.naturalHeight || image.height) * scale);
+      }
+
+    },
+  };
+}
