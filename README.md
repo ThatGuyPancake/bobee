@@ -124,3 +124,11 @@ Bobee dresses for the local date automatically. The tray's **Outfits** checkbox 
 Outfits follow every animation and facing direction. Missing outfit assets leave Bobee running without outfits. In development, `BOBEE_DATE` can preview a date; packaged builds use the real local clock.
 
 Art is drawn in code: `node art/make-states.js` writes sprite strips and head anchors, then `node art/make-props.js --preview-props outfits.png` writes props and a preview. Run `node scripts/lint-sprites.js` to check all art.
+
+## Treat jar (1.4.4)
+
+A small honey jar appears 2–3 times a day between 09:00 and 21:00 while you are active. Drag one of its three treats onto Bobee: he munches, does a happy reaction and gains happiness. Missed drops return to the jar. The jar fades after the last treat or five minutes unattended; Pause, idle, lock, sleep and display changes close its windows.
+
+The jar and treats use opaque pixels for mouse handling. Losing pointer capture or pressing a key during a drag returns the treat. A 30-second recovery limit clears a drag if both release paths fail. Treats are cookie, honey and berries, drawn in code using Bobee's palette. Small displays without room for a jar skip that showing.
+
+Daily showing counts are saved locally in `bobee-state.json`; no network service is used. For development only, `BOBEE_JAR_NOW=1 npm start` shows a jar five seconds after launch. Packaged builds ignore this flag.

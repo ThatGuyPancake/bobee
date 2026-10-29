@@ -93,3 +93,29 @@ if(previewAt>=0) {
 }
 console.log('outfit props generated');
 
+// Small desktop props use their native pixel sizes, with the same dark outline.
+function small(name,size,draw) {
+ const mask=new Img(size,size);draw(mask);const im=new Img(size,size);
+ for(let y=1;y<size-1;y++)for(let x=1;x<size-1;x++)if(mask.get(x,y))for(const [dx,dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]])im.set(x+dx,y+dy,C.out);
+ im.blit(mask);writePng(path.join(dir,name+'.png'),im);return im;
+}
+const smallImages=[];
+for(const open of [false,true])smallImages.push(small(open?'jar-open':'jar',48,im=>{
+ rect(im,12,18,24,24,C.muzzle);rect(im,9,23,30,15,C.muzzle);rect(im,13,20,5,19,C.cream);
+ rect(im,19,26,15,11,gold);rect(im,23,28,7,7,C.shade);rect(im,24,29,5,5,gold);
+ if(open){rect(im,24,8,15,5,C.shade);rect(im,20,11,12,5,C.light);}else{rect(im,11,13,26,6,C.shade);rect(im,13,14,22,2,C.light);}
+}));
+smallImages.push(small('cookie',32,im=>{
+ for(let y=7;y<26;y++)for(let x=6;x<27;x++)if(((x-16)/10)**2+((y-16)/9)**2<1)im.set(x,y,C.muzzle);
+ for(const [x,y] of [[11,11],[20,12],[15,18],[21,21],[9,20]])rect(im,x,y,3,3,C.shade);
+}));
+smallImages.push(small('honey',32,im=>{
+ rect(im,9,11,15,15,C.muzzle);rect(im,7,15,19,8,gold);rect(im,10,7,13,5,C.shade);rect(im,11,8,11,2,C.light);rect(im,12,15,9,7,C.cream);rect(im,15,17,3,3,gold);
+}));
+smallImages.push(small('berries',32,im=>{
+ rect(im,14,7,4,11,green);rect(im,18,7,6,4,green);
+ for(const [cx,cy] of [[10,19],[21,19],[16,24]])for(let y=-4;y<=4;y++)for(let x=-4;x<=4;x++)if(x*x+y*y<=20)im.set(cx+x,cy+y,red);
+ for(const [x,y] of [[9,17],[20,17],[15,22]])rect(im,x,y,2,2,pink);
+}));
+const smallPreview=process.argv.indexOf('--preview-treats');
+if(smallPreview>=0){const z=6,out=new Img(48*5*z,48*z);for(let y=0;y<out.h;y++)for(let x=0;x<out.w;x++)out.set(x,y,[70,150,115]);smallImages.forEach((im,i)=>{for(let y=0;y<im.h;y++)for(let x=0;x<im.w;x++){const c=im.get(x,y);if(c)rect(out,(i*48+x)*z,y*z,z,z,c);}});writePng(process.argv[smallPreview+1],out);}

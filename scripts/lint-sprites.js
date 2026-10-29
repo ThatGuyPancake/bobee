@@ -10,8 +10,9 @@ const TOP_MARGIN = 4; // masters keep this many empty rows at the top for hearts
 const HOPS = new Set(['happy']); // strips whose frames jump on purpose, so their feet leave the ground
 
 // image: { width, height, data } with RGBA bytes. Returns a list of problem strings.
-function lintImage(img, { master = false, hops = false } = {}) {
+function lintImage(img, { master = false, hops = false, frame = FRAME, prop = false } = {}) {
   const { width: w, height: h, data } = img;
+  const FRAME = frame;
   const problems = [];
   const alpha = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : data[(y * w + x) * 4 + 3]);
   const where = (x, y) => `frame ${Math.floor(x / FRAME)} pixel (${x % FRAME},${y})`;
@@ -43,7 +44,7 @@ function lintImage(img, { master = false, hops = false } = {}) {
         ground = y;
         const lx = x - f * FRAME;
         // The bottom row is the ground, so feet may touch it.
-        if (lx === 0 || lx === FRAME - 1 || y === 0) problems.push(`${where(x, y)} touches the frame edge`);
+        if (lx === 0 || lx === FRAME - 1 || y === 0 || (prop && y === h - 1)) problems.push(`${where(x, y)} touches the frame edge`);
         const n = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => solid(x + dx, y + dy, f)).length;
         if (n <= 1) problems.push(`${where(x, y)} is an isolated pixel (${n} opaque neighbour${n === 1 ? '' : 's'})`);
       }
@@ -66,7 +67,7 @@ function lintImage(img, { master = false, hops = false } = {}) {
 function lintFile(file) {
   const img = PNG.sync.read(fs.readFileSync(file));
   const name = path.basename(file);
-  return lintImage(img, { master: /^bobee-master.*\.png$/.test(name), hops: HOPS.has(name.replace(/\.png$/, '')) });
+  return lintImage(img, { master: /^bobee-master.*\.png$/.test(name), hops: HOPS.has(name.replace(/\.png$/, '')), prop: path.basename(path.dirname(file)) === 'props', frame: path.basename(path.dirname(file)) === 'props' ? img.height : FRAME });
 }
 
 function defaultFiles(root = path.join(__dirname, '..')) {
@@ -94,3 +95,4 @@ if (require.main === module) {
 }
 
 module.exports = { FRAME, TOP_MARGIN, HOPS, lintImage, lintFile, defaultFiles };
+
