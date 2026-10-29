@@ -60,6 +60,7 @@ export function createBrain({
   let target = px;
   let paused = false;
   let phase = 'day';
+  let mood = 'content';
   let systemIdle = 0;
   let lastPulseAt = -Infinity;
   let pulses = 0;
@@ -203,7 +204,7 @@ export function createBrain({
     const left = VISIT_BUDGET_MS - awakeUsed;
     if (left < VISIT_MIN_MS) return;
     sleepMoment = null;
-    beginVisit(Math.min(dur, left));
+    beginVisit(Math.min(dur * (phase === 'evening' ? EVENING_FACTOR : 1), left));
     timedState = null;
     if (yawnMs > 0) {
       state = 'waking';
@@ -291,7 +292,7 @@ export function createBrain({
       }
     } else if (due) {
       // a visit came due while he was awake anyway: make it a visit
-      beginVisit(Math.min(plan[planIdx++].dur, Math.max(0, VISIT_BUDGET_MS - awakeUsed)));
+      beginVisit(Math.min(plan[planIdx++].dur * (phase === 'evening' ? EVENING_FACTOR : 1), Math.max(0, VISIT_BUDGET_MS - awakeUsed)));
     } else {
       awakeLeft -= dt;
       if (awakeLeft <= 0 && state !== timedState) goHome();
@@ -320,7 +321,7 @@ export function createBrain({
           if (hourClock >= HOUR_MS) {
             hourClock -= HOUR_MS;
             awakeUsed = 0;
-            plan = makePlan(random, false, phase === 'evening' ? EVENING_FACTOR : 1);
+            plan = makePlan(random, false);
             planIdx = 0;
           }
         }
@@ -335,8 +336,17 @@ export function createBrain({
           stateTimer -= dt;
           if (stateTimer <= 0) {
             const r = random();
-            if (r < WALK_CHANCE) startWalk();
-            else if (r < WALK_CHANCE + SIP_CHANCE && sipMs > 0) startMoment('sip', sipMs);
+            const sip = sipMs > 0 ? (phase === 'morning' ? 0.4 : SIP_CHANCE) : 0;
+            const happy = mood !== 'content' && happyMs > 0 ? 0.1 : 0;
+            const wave = mood === 'overjoyed' && waveMs > 0 ? 0.05 : 0;
+            const yawn = phase === 'evening' && yawnMs > 0 ? 0.1 : 0;
+            // Extras first use the idle share, then trim walking if needed.
+            const walk = Math.min(phase === 'morning' ? 0.5 : WALK_CHANCE, 1 - sip - happy - wave - yawn);
+            if (r < walk) startWalk();
+            else if (r < walk + sip) startMoment('sip', sipMs);
+            else if (r < walk + sip + happy) startMoment('happy', happyMs);
+            else if (r < walk + sip + happy + wave) startMoment('wave', waveMs);
+            else if (r < walk + sip + happy + wave + yawn) startMoment('yawn', yawnMs);
             else enterIdle();
           }
         } else if (state === timedState) {
@@ -484,6 +494,24 @@ export function createBrain({
       wakeHere();
     },
 
+    resumeFromSleep() {
+      down = null;
+      dragging = false;
+      downWasAsleep = false;
+      bedAtHome();
+      events.length = 0;
+      bubbles.length = 0;
+      pendingRandom = false;
+      hourClock = 0;
+      awakeUsed = 0;
+      planIdx = 0;
+      plan = makePlan(random, false);
+    },
+
+    setMood(level) {
+      mood = level;
+    },
+
     setPhase(p) {
       phase = p;
     },
@@ -543,3 +571,4 @@ export function createBrain({
     },
   };
 }
+

@@ -104,6 +104,8 @@ const ANIMS = {
   sip: [{}, { eyes: 'closed', dy: 1 }],
   yawn: [{ eyes: 'closed', mouth: 'open' }, { eyes: 'closed', mouth: 'open', dy: -1 }],
   pet: [{ eyes: 'closed' }, { eyes: 'closed', dy: 1 }],
+  'sleep-peek': [{ eyes: 'closed' }, {}, {}, { eyes: 'closed' }],
+  munch: [{ mouth: 'open' }, { eyes: 'closed' }],
   'sleep-pet': [{ eyes: 'closed' }, { eyes: 'closed', dy: -1 }],
 };
 
@@ -132,3 +134,4 @@ for (let y = 0; y < icon.height; y++) {
 }
 writePng(path.join(root, 'build', 'icon.png'), icon);
 console.log('placeholders written');
+

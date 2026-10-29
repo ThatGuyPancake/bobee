@@ -7,6 +7,8 @@ A tiny pixel-art bear who lives on your Windows desktop. He naps in the bottom-r
 - **Home.** Most of the time Bobee is asleep in the bottom-right corner of the main screen, feet on the taskbar. He never blocks clicks: only his own pixels catch the mouse.
 - **Visits.** About six times an hour he wakes up with a yawn, waves, wanders, sips his coffee and says something now and then. That adds up to about 10 minutes an hour. When the visit is over he walks back to the corner, yawns and goes back to sleep.
 - **Waking him.** Click him and he wakes up right where he is, stays up for a minute, then walks home and dozes off. Clicking him on his way home wakes him again. You can drag him anywhere; after a minute he walks back home.
+- **Mood.** Pets (+2), clicks (+1) and treats (+8) make him happier: more hops, sweeter lines, and little waves when overjoyed. He gently settles back with a three-hour half-life, never below his content resting mood.
+- **Daily rhythm.** A morning coffee hello (06–11), one lunch snack (12–14), and shorter, sleepier evening visits (20–24). No visits at night. All times follow your local clock.
 - **Petting.** Move the mouse back and forth over him a few times and he blushes, leans into it and little hearts float up. If he's asleep he smiles in his sleep and sleeps on. He can be petted again after a few seconds.
 - **Say something** (tray menu) wakes him for a short visit with a wave.
 - **Away from the PC.** While the screen is idle or locked he stays asleep at home, and visits wait until you're back.
@@ -88,6 +90,11 @@ Breathing, squash and stretch, the walk bob, the hover wiggle and the drag tilt 
 
 - `sweet`, `jokes`, `facts`: said every so often while he's visiting. Each time, a group is picked at random first, so a long list doesn't crowd out a short one.
 - `click`: said when you click Bobee. If it's missing, he picks from the other three.
+- Groups he says on cue, never at random:
+  - `morning`, `lunch`, `evening`: the parts of the day (the first visit of a morning, the lunch snack, now and then in the evening).
+  - `treat`, `yum`, `full`: the treat jar (it appears, a treat is eaten, the jar is empty).
+  - `winter`, `christmas`, `newyear`, `valentine`, `easter`, `spring`, `summer`, `halloween`: holidays and seasons.
+  Any of these you leave out, or that are broken, use a built-in line instead.
 - A message in `[ ]` brackets is shown as separate bubbles a few seconds apart, which is how jokes get a setup and a punchline. A plain `"text"` is one bubble.
 
 If the file is broken (a missing comma, say), the built-in defaults are used. Emoji are welcome. Rebuild with `npm run dist` to ship changes.
@@ -97,3 +104,4 @@ If the file is broken (a missing comma, say), the built-in defaults are used. Em
 Use Windows Settings > Apps > Installed apps > Bobee > Uninstall, or run the uninstaller from `%LOCALAPPDATA%\Programs\bobee`.
 
 In the installed app, Bobee is set to start with Windows the first time it runs. You can turn that off any time from the tray icon menu: untick **Start with Windows**. The same menu has Pause/Resume, Say something and Quit.
+`sleep-peek` (4 frames): one eye opens at night, then back to sleep. `munch` (6 frames): a cookie, chewing, crumbs and a happy face.

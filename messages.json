@@ -38,5 +38,64 @@
     "boop!",
     "that tickles!",
     "coffee time? ☕"
+    ],
+  "morning": [
+    "good morning ☀️",
+    "morning! coffee first ☕",
+    "rise and shine 🌻"
+  ],
+  "lunch": [
+    "lunch time! 🥪",
+    "don't forget to eat something 🍎"
+  ],
+  "evening": [
+    "don't stay up too late 🌙",
+    "cozy evening time 🛋️",
+    "you did enough for today 💛"
+  ],
+  "treat": [
+    "ooh, snacks? 🍯",
+    "is that honey I smell? 🐝"
+  ],
+  "yum": [
+    "yum! 🍪",
+    "nom nom nom 😋",
+    "best snack ever! 🍯"
+  ],
+  "full": [
+    "I'm so full! 🐻",
+    "time for a food nap 😴"
+  ],
+  "winter": [
+    "brr, cozy scarf time 🧣",
+    "hot cocoa weather ☕❄️"
+  ],
+  "christmas": [
+    "Merry Christmas! 🎄",
+    "have you been good this year? 🎁"
+  ],
+  "newyear": [
+    "Happy New Year! 🎉",
+    "this year is going to be great ✨"
+  ],
+  "valentine": [
+    "Happy Valentine's ❤️",
+    "you're my favourite human 💕"
+  ],
+  "easter": [
+    "Happy Easter! 🐣",
+    "I found an egg! 🥚"
+  ],
+  "spring": [
+    "spring is here 🌸",
+    "the flowers are waking up too 🌷"
+  ],
+  "summer": [
+    "summer vibes 😎",
+    "ice cream weather 🍦"
+  ],
+  "halloween": [
+    "boo! 🎃",
+    "did I scare you? 👻"
   ]
 }

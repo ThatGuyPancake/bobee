@@ -628,6 +628,65 @@ S['sleep-pet'] = [0, 1, 0, -1].map((wig, i) => {
   return f;
 });
 
+// one eye (his left, on the viewer's right) as the master drew it, or half-open under a lid
+function oneEye(b, kind) {
+  const e = EYES.right;
+  for (let y = 38; y <= 46; y++) for (let x = e.x0; x <= e.x1; x++) b.set(x, y, MASTER.get(x, y) || C.fur);
+  if (kind === 'half') {
+    for (let y = 38; y <= 43; y++) for (let x = e.x0; x <= e.x1; x++) b.set(x, y, C.fur);
+    paint(b, [[4, 44], [3, 43], [2, 43], [1, 43], [0, 43], [-1, 43], [-2, 43], [-3, 43]].map(([dx, y]) => [e.cx + dx, y]), C.dark);
+  }
+}
+function sleepZs(f, oy, i, n) {
+  for (const [phase, big] of [[0, false], [0.5, true]]) {
+    const u = (i / n + phase) % 1;
+    zee(f, 77 + Math.round(u * 6), oy + 22 - Math.round(u * 18), big);
+  }
+}
+
+// sleep-peek: asleep, one eye opens a little, then all the way, then he's back to sleep
+S['sleep-peek'] = ['closed', 'half', 'open', 'closed'].map((eye, i) => {
+  const b = removeSteam(canvas());
+  eyes(b, 'closed');
+  if (eye !== 'closed') oneEye(b, eye);
+  const f = place(b);
+  if (eye === 'closed') sleepZs(f, shiftOf(b), i, 6);
+  return f;
+});
+
+// a cookie in his paw: size 2 is whole, 1 is bitten
+function cookie(b, x, y, size) {
+  const shapes = {
+    2: ['..OOO..', '.OccdO.', 'OcdcccO', 'OcccdcO', 'OdcccO.', '.OOOO..'],
+    1: ['..OO...', '.OcO...', 'OcdO...', 'OccdO..', 'OdccO..', '.OOO...'],
+  };
+  const k = { O: C.out, c: C.muzzle, d: C.shade };
+  shapes[size].forEach((r, j) => [...r].forEach((ch, i) => k[ch] && b.set(x + i, y + j, k[ch])));
+}
+
+// munch: mug in his lap, one paw holds a cookie up to his mouth; he chews it smaller,
+// crumbs fall below his chin, and it's gone with a happy face at the end
+S.munch = [
+  // [mouth, cookie size, crumbs, eyes]
+  ['o', 2, null, 'open'],
+  ['normal', 2, null, 'closed'],
+  ['o', 1, [[47, 56], [51, 58]], 'open'],
+  ['normal', 1, null, 'closed'],
+  ['o', 0, [[49, 57], [46, 59]], 'happy'],
+  ['normal', 0, null, 'happy'],
+].map(([mo, size, crumbs, eye]) => {
+  const b = removeSteam(canvas());
+  plainTorso(b, { x1: 41 });
+  drawMug(b, 0, 0, { ringX1: 48 });
+  eyes(b, eye);
+  mouth(b, mo);
+  if (eye !== 'open') blush(b);
+  paw(b, 40, 57, 5.6);
+  if (size) cookie(b, 38, 47, size);
+  if (crumbs) for (const [x, y] of crumbs) paint(b, [[x, y], [x + 1, y]], C.muzzle);
+  return place(b);
+});
+
 // ---------- write ----------
 function strip(name, frames) {
   const s = new Img(F * frames.length, F);
@@ -638,7 +697,7 @@ function strip(name, frames) {
 for (const k of Object.keys(S)) strip(k, S[k]);
 
 if (PREVIEW) {
-  const rows = ['idle', 'walk', 'sleep', 'drag', 'happy', 'wave', 'sip', 'yawn', 'pet', 'sleep-pet'];
+  const rows = ['idle', 'walk', 'sleep', 'drag', 'happy', 'wave', 'sip', 'yawn', 'pet', 'sleep-pet', 'sleep-peek', 'munch'];
   const Z = 4;
   const cols = Math.max(...rows.map((r) => S[r].length));
   const pv = new Img(F * cols * Z, F * rows.length * Z);
