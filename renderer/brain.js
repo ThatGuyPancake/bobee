@@ -60,6 +60,7 @@ export function createBrain({
   let target = px;
   let paused = false;
   let phase = 'day';
+  let mood = 'content';
   let systemIdle = 0;
   let lastPulseAt = -Infinity;
   let pulses = 0;
@@ -335,8 +336,17 @@ export function createBrain({
           stateTimer -= dt;
           if (stateTimer <= 0) {
             const r = random();
-            if (r < WALK_CHANCE) startWalk();
-            else if (r < WALK_CHANCE + SIP_CHANCE && sipMs > 0) startMoment('sip', sipMs);
+            const sip = sipMs > 0 ? (phase === 'morning' ? 0.4 : SIP_CHANCE) : 0;
+            const happy = mood !== 'content' && happyMs > 0 ? 0.1 : 0;
+            const wave = mood === 'overjoyed' && waveMs > 0 ? 0.05 : 0;
+            const yawn = phase === 'evening' && yawnMs > 0 ? 0.1 : 0;
+            // Extras first use the idle share, then trim walking if needed.
+            const walk = Math.min(phase === 'morning' ? 0.5 : WALK_CHANCE, 1 - sip - happy - wave - yawn);
+            if (r < walk) startWalk();
+            else if (r < walk + sip) startMoment('sip', sipMs);
+            else if (r < walk + sip + happy) startMoment('happy', happyMs);
+            else if (r < walk + sip + happy + wave) startMoment('wave', waveMs);
+            else if (r < walk + sip + happy + wave + yawn) startMoment('yawn', yawnMs);
             else enterIdle();
           }
         } else if (state === timedState) {
@@ -484,6 +494,10 @@ export function createBrain({
       wakeHere();
     },
 
+    setMood(level) {
+      mood = level;
+    },
+
     setPhase(p) {
       phase = p;
     },
@@ -543,3 +557,4 @@ export function createBrain({
     },
   };
 }
+

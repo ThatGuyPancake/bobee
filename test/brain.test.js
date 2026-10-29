@@ -679,3 +679,39 @@ describe('brain: wave, sip and yawn', () => {
     expect(b.tick(100).state).toBe('idle');
   });
 });
+
+describe('mood and daily rhythm', () => {
+  function count(phase, mood) {
+    const b = mk({ random: seeded(42), sipMs: 1200, happyMs: 750, waveMs: 1000, yawnMs: 1000 });
+    b.setPhase(phase);
+    b.setMood(mood);
+    const counts = {};
+    let prev = '';
+    for (let t = 0; t < 2 * 3600000; t += 100) {
+      const o = b.tick(100);
+      if (o.state !== prev) {
+        counts[o.state] = (counts[o.state] || 0) + 1;
+        if (prev === 'yawn') expect(o.state).toBe('idle');
+      }
+      prev = o.state;
+    }
+    return counts;
+  }
+  it('sips at least 1.6 times as often in the morning', () => {
+    expect(count('morning', 'content').sip).toBeGreaterThanOrEqual(count('day', 'content').sip * 1.6);
+  });
+  it('hops and waves spontaneously only when his mood calls for them', () => {
+    const content = count('day', 'content');
+    expect(content.happy || 0).toBe(0);
+    expect(content.wave || 0).toBe(0);
+    const joy = count('day', 'overjoyed');
+    expect(joy.happy).toBeGreaterThan(0);
+    expect(joy.wave).toBeGreaterThan(0);
+    const happy = count('day', 'happy');
+    expect(happy.happy).toBeGreaterThan(0);
+    expect(happy.wave || 0).toBe(0);
+  });
+  it('evening yawns return to idle without sleeping', () => {
+    expect(count('evening', 'content').yawn).toBeGreaterThan(0);
+  });
+});
