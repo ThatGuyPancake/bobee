@@ -204,7 +204,7 @@ export function createBrain({
     const left = VISIT_BUDGET_MS - awakeUsed;
     if (left < VISIT_MIN_MS) return;
     sleepMoment = null;
-    beginVisit(Math.min(dur, left));
+    beginVisit(Math.min(dur * (phase === 'evening' ? EVENING_FACTOR : 1), left));
     timedState = null;
     if (yawnMs > 0) {
       state = 'waking';
@@ -292,7 +292,7 @@ export function createBrain({
       }
     } else if (due) {
       // a visit came due while he was awake anyway: make it a visit
-      beginVisit(Math.min(plan[planIdx++].dur, Math.max(0, VISIT_BUDGET_MS - awakeUsed)));
+      beginVisit(Math.min(plan[planIdx++].dur * (phase === 'evening' ? EVENING_FACTOR : 1), Math.max(0, VISIT_BUDGET_MS - awakeUsed)));
     } else {
       awakeLeft -= dt;
       if (awakeLeft <= 0 && state !== timedState) goHome();
@@ -321,7 +321,7 @@ export function createBrain({
           if (hourClock >= HOUR_MS) {
             hourClock -= HOUR_MS;
             awakeUsed = 0;
-            plan = makePlan(random, false, phase === 'evening' ? EVENING_FACTOR : 1);
+            plan = makePlan(random, false);
             planIdx = 0;
           }
         }
@@ -492,6 +492,20 @@ export function createBrain({
       if (paused || state === 'drag') return;
       wake(); // always her doing, so she's at the PC
       wakeHere();
+    },
+
+    resumeFromSleep() {
+      down = null;
+      dragging = false;
+      downWasAsleep = false;
+      bedAtHome();
+      events.length = 0;
+      bubbles.length = 0;
+      pendingRandom = false;
+      hourClock = 0;
+      awakeUsed = 0;
+      planIdx = 0;
+      plan = makePlan(random, false);
     },
 
     setMood(level) {

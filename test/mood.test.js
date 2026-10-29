@@ -103,3 +103,14 @@ describe('phaseOf', () => {
     expect(at(23, 59)).toBe('evening');
   });
 });
+
+it('keeps settling after a capped overnight gap', () => {
+  const m = createMood({ happiness: 100, updatedAt: new Date(0).toISOString() }, 72 * H);
+  const resumed = m.value(72 * H);
+  expect(m.value(75 * H)).toBeCloseTo(60 + (resumed - 60) / 2, 10);
+});
+it('a backward clock change never restores happiness already settled', () => {
+  const m = createMood({ happiness: 100, updatedAt: new Date(0).toISOString() }, 0);
+  expect(m.value(3 * H)).toBe(80);
+  expect(m.value(H)).toBe(80);
+});

@@ -273,6 +273,7 @@ if (gotLock) app.whenReady().then(() => {
   registerIpc();
   createWindow();
   startIdlePoll();
+  powerMonitor.on('resume', () => sendCommand('system-resume'));
   startHook();
   initAutostart();
   createTray();

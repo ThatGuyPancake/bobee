@@ -157,7 +157,22 @@ async function main() {
     await syncX();
   });
   window.bobee.onCommand((c) => {
-    if (c === 'pause') {
+    if (c === 'system-resume') {
+      visitToken++;
+      pendingGreeting = null;
+      skipFirstRandom = false;
+      pressed = false;
+      moved = false;
+      grab = null;
+      lastMove = null;
+      petting.reset();
+      stopTalking();
+      brain.resumeFromSleep();
+      updatePhase();
+      saveMood();
+      // Refresh daily fields now; visit-start also reads a fresh store snapshot.
+      window.bobee.getState().catch((e) => console.error('[bobee] resume state', e));
+    } else if (c === 'pause') {
       paused = true;
       visitToken++;
       pendingGreeting = null;

@@ -30,7 +30,12 @@ export function createMood(saved, nowMs) {
   const savedAt = typeof s.updatedAt === 'string' ? Date.parse(s.updatedAt) : NaN;
   let baseAt = Number.isNaN(savedAt) ? nowMs : savedAt;
 
-  const value = (nowMs) => settle(base, nowMs - baseAt);
+  const value = (nowMs) => {
+    base = settle(base, nowMs - baseAt);
+    baseAt = nowMs; // consume this interval, including a capped gap or clock rollback
+    return base;
+  };
+  value(nowMs);
 
   return {
     add(kind, nowMs) {

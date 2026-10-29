@@ -589,7 +589,7 @@ describe('brain: home and visits', () => {
     const longest = (phase) => {
       const b = mkV({ random: seeded(5) });
       b.setPhase(phase);
-      const out = run(b, 2 * 60 * MIN, 1000).slice(3600);
+      const out = run(b, 60 * MIN, 1000);
       let streak = 0;
       let max = 0;
       for (const o of out) {
@@ -715,3 +715,18 @@ describe('mood and daily rhythm', () => {
     expect(count('evening', 'content').yawn).toBeGreaterThan(0);
   });
 });
+
+it('system resume clears visits, drag, moments and reactions and settles at home', () => {
+  const b = createBrain({ random: seeded(1), minX: 0, maxX: 1000, yawnMs: 1000 });
+  b.wakeHere();
+  b.pointerDown(100,100);
+  b.pointerMove(120,100);
+  b.resumeFromSleep();
+  const o = b.tick(0);
+  expect(o.state).toBe('home');
+  expect(o.x).toBe(1000);
+  expect(o.event).toBe(null);
+  expect(o.bubble).toBe(null);
+  expect(b.pointerUp()).toBe(null);
+});
+
