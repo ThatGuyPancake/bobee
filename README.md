@@ -132,3 +132,13 @@ A small honey jar appears 2–3 times a day between 09:00 and 21:00 while you ar
 The jar and treats use opaque pixels for mouse handling. Losing pointer capture or pressing a key during a drag returns the treat. A 30-second recovery limit clears a drag if both release paths fail. Treats are cookie, honey and berries, drawn in code using Bobee's palette. Small displays without room for a jar skip that showing.
 
 Daily showing counts are saved locally in `bobee-state.json`; no network service is used. For development only, `BOBEE_JAR_NOW=1 npm start` shows a jar five seconds after launch. Packaged builds ignore this flag.
+
+## Updates (1.5.0+)
+Installed Bobee checks GitHub Releases 15 seconds after startup and every four hours. Stable updates download quietly. The tray shows progress, errors/retry, and **Update ready — restart Bobee**. Only clicking that action installs an update; closing Bobee normally does not. **Check for updates** checks immediately. Offline failures leave Bobee running. Settings and happiness remain in the existing user-data folder. Development runs never check the feed.
+
+Install 1.5.0 once to enable this feature. It contacts public GitHub for release metadata and downloads; no account or token is shipped in Bobee.
+
+### Publishing an update
+Bump package.json and package-lock.json versions, run the tests, then `npm run dist`. Publish a GitHub release tagged `v<version>` from that exact commit with **all three** matching files: `Bobee-Setup-<version>.exe`, its `.blockmap`, and `latest.yml`. Do not rename those files. Upload all assets to a draft release before publishing so installed apps never see an incomplete update. Builds themselves never publish. Never reuse an existing version for changed binaries.
+
+The updater uses the public ThatGuyPancake/bobee GitHub feed and verifies download hashes from the release manifest. Windows installer signing is still dependent on the build machine's certificate configuration; no signing certificate is introduced by this feature.

@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('node:fs');
+const { createUpdates } = require('./lib/updates');
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, protocol, screen, Tray } = require('electron');
 const { presenceFrom } = require('./lib/presence');
@@ -39,6 +40,7 @@ let fx = 0; // float x, so sub-pixel dx accumulates
 let presence = 'active';
 let idleTimer = null;
 let hook = null;
+let updates = null;
 let tray = null; // module-level reference so the Tray is not garbage collected
 let paused = false;
 let companionSeenAt = 0;
@@ -276,6 +278,10 @@ function buildTrayMenu() {
       },
     },
     { type: 'separator' },
+    { label: updates?.status().label || 'Updates starting…', enabled: !!updates?.status().ready, click: () => updates?.install() },
+    { label: 'Check for updates', enabled: !!updates?.status().canCheck, click: () => updates?.check() },
+    { label: 'Version ' + app.getVersion(), enabled: false },
+    { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]);
 }
@@ -333,6 +339,12 @@ if (gotLock) app.whenReady().then(() => {
   startHook();
   initAutostart();
   createTray();
+  updates = createUpdates({
+    updater: require('electron-updater').autoUpdater, packaged: app.isPackaged,
+    beforeInstall: () => { store.flush(); jars?.close(false); },
+    changed: () => { if (tray && !tray.isDestroyed()) tray.setContextMenu(buildTrayMenu()); },
+  });
+  tray.setContextMenu(buildTrayMenu());
 
   const onMetrics = () => {
     if (!win) return;
@@ -349,6 +361,7 @@ if (gotLock) app.whenReady().then(() => {
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => { jars?.close(false); });
 app.on('will-quit', () => {
+  updates?.dispose();
   clearTimeout(recoveryTimer);
   clearInterval(jarTimer);
   clearTimeout(debugJarTimer);
