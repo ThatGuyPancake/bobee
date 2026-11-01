@@ -49,10 +49,12 @@ export function createMood(saved, nowMs) {
   };
 }
 
-// night 0-5, morning 6-10, day 11, lunch 12-13, day 14-19, evening 20-23
+// Quiet night 21:00 inclusive to 07:30 exclusive; all times are local.
+// Morning until 11, day 11-12, lunch 12-14, day 14-20, evening 20-21.
 export function phaseOf(date) {
   const h = date.getHours();
-  if (h < 6) return 'night';
+  const minutes = h * 60 + date.getMinutes();
+  if (minutes >= 21 * 60 || minutes < 7 * 60 + 30) return 'night';
   if (h < 11) return 'morning';
   if (h < 12) return 'day';
   if (h < 14) return 'lunch';

@@ -9,6 +9,7 @@ function listen(channel, cb) {
 }
 
 contextBridge.exposeInMainWorld('bobee', {
+  reportVisible: (visible) => ipcRenderer.send('companion-visible', !!visible),
   moveBy: (dx, dy) => ipcRenderer.send('move-by', dx, dy),
   moveTo: (x, y) => ipcRenderer.send('move-to', x, y),
   dropToFloor: () => ipcRenderer.send('drop-to-floor'),

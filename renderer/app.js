@@ -22,6 +22,7 @@ async function fetchText(url) {
 }
 
 async function main() {
+  let lastVisibilityAt = 0;
   const canvas = document.getElementById('bobee');
   const bubbleEl = document.getElementById('bubble');
   const wrap = document.getElementById('sprite-wrap');
@@ -215,6 +216,8 @@ async function main() {
         skipFirstRandom = false;
       }
     } else if (c === 'system-resume') {
+      wrap.classList.toggle('away', paused);
+      syncX().catch(console.error);
       treats.cancel();
       visitToken++;
       pendingGreeting = null;
@@ -369,6 +372,12 @@ async function main() {
     updateOutfits();
     outfitLayer?.blush(mood.level(Date.now()) !== 'content' && out.animation === 'idle' && Math.floor(now / 250) % 20 === 0);
     player.draw(now);
+    if (!lastVisibilityAt || now - lastVisibilityAt >= 1000) {
+      const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      const drawn = pixels.some((value, index) => index % 4 === 3 && value > 0);
+      window.bobee.reportVisible(drawn && !paused && !document.hidden && !wrap.classList.contains('away'));
+      lastVisibilityAt = now;
+    }
     const m = motion.update(now, { animation: out.animation, dx: out.dx, dragging: out.state === 'drag' });
     const tf = toTransform(m);
     if (tf !== lastTransform) {

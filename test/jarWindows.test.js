@@ -24,7 +24,7 @@ it('closes all windows and timers immediately on pause/display/exit cancellation
  const s=setup();s.control.show();s.control.grab(made[0].webContents);s.control.close();vi.advanceTimersByTime(400000);expect(made.every(w=>w.dead)).toBe(true);expect(vi.getTimerCount()).toBe(0);
 });
 it('expires unattended jars but never interrupts a held treat',()=>{
- const s=setup();s.control.show();s.control.grab(made[0].webContents);vi.advanceTimersByTime(300001);expect(made[0].dead).not.toBe(true);s.control.release(made[0].webContents,true);vi.advanceTimersByTime(1400);expect(made[0].dead).toBe(true);s.control.close();
+ const s=setup();s.control.show();vi.advanceTimersByTime(40000);s.control.grab(made[0].webContents);vi.advanceTimersByTime(6000);expect(made[0].dead).not.toBe(true);s.control.release(made[0].webContents,true);vi.advanceTimersByTime(1400);expect(made[0].dead).toBe(true);s.control.close();
 });
 it('skips failed windows and recovers a treat creation failure',()=>{
  let fail=false;class Failing extends Window{constructor(o){if(fail)throw Error('window failure');super(o);}}
@@ -46,4 +46,10 @@ it('bounds recovery after a missing release and does not keep timers after cance
 it('fades after the third hit and emits empty only once',()=>{
  const s=setup();s.control.show();const jar=made[0];s.cursor({x:1820,y:1000});for(let i=0;i<3;i++){s.control.grab(jar.webContents);s.control.release(jar.webContents);}
  expect(s.events.filter(([n,p])=>n==='jar'&&p.event==='empty')).toHaveLength(1);vi.advanceTimersByTime(1000);expect(jar.dead).toBe(true);s.control.close();
+});
+it('removes an unattended jar after 45 seconds plus fade',()=>{
+ const s=setup();s.control.show();vi.advanceTimersByTime(46000);expect(made[0].dead).toBe(true);s.control.close();
+});
+it('removes a jar promptly when Bobee becomes unavailable',()=>{
+ let active=true;const s=setup({active:()=>active});s.control.show();active=false;vi.advanceTimersByTime(1000);expect(made[0].dead).toBe(true);s.control.close();
 });

@@ -92,7 +92,7 @@ describe('phaseOf', () => {
   it('follows the day', () => {
     expect(at(0)).toBe('night');
     expect(at(5, 59)).toBe('night');
-    expect(at(6)).toBe('morning');
+    expect(at(6)).toBe('night');
     expect(at(10, 59)).toBe('morning');
     expect(at(11)).toBe('day');
     expect(at(12)).toBe('lunch');
@@ -100,7 +100,15 @@ describe('phaseOf', () => {
     expect(at(14)).toBe('day');
     expect(at(19, 59)).toBe('day');
     expect(at(20)).toBe('evening');
-    expect(at(23, 59)).toBe('evening');
+    expect(at(23, 59)).toBe('night');
+  });
+  it.each([
+    [20, 59, 'evening'],
+    [21, 0, 'night'],
+    [7, 29, 'night'],
+    [7, 30, 'morning'],
+  ])('at %i:%i the phase is %s', (h, m, phase) => {
+    expect(at(h, m)).toBe(phase);
   });
 });
 

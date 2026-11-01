@@ -8,7 +8,7 @@ A tiny pixel-art bear who lives on your Windows desktop. He naps in the bottom-r
 - **Visits.** About six times an hour he wakes up with a yawn, waves, wanders, sips his coffee and says something now and then. That adds up to about 10 minutes an hour. When the visit is over he walks back to the corner, yawns and goes back to sleep.
 - **Waking him.** Click him and he wakes up right where he is, stays up for a minute, then walks home and dozes off. Clicking him on his way home wakes him again. You can drag him anywhere; after a minute he walks back home.
 - **Mood.** Pets (+2), clicks (+1) and treats (+8) make him happier: more hops, sweeter lines, and little waves when overjoyed. He gently settles back with a three-hour half-life, never below his content resting mood.
-- **Daily rhythm.** A morning coffee hello (06–11), one lunch snack (12–14), and shorter, sleepier evening visits (20–24). No visits at night. All times follow your local clock.
+- **Daily rhythm.** A morning coffee hello (07:30–11:00), one lunch snack (12–14), and shorter, sleepier evening visits (20:00–21:00). Quiet hours run from 21:00 inclusive through 07:30 exclusive, with no visits. All times follow your local clock.
 - **Petting.** Move the mouse back and forth over him a few times and he blushes, leans into it and little hearts float up. If he's asleep he smiles in his sleep and sleeps on. He can be petted again after a few seconds.
 - **Say something** (tray menu) wakes him for a short visit with a wave.
 - **Away from the PC.** While the screen is idle or locked he stays asleep at home, and visits wait until you're back.
@@ -127,7 +127,7 @@ Art is drawn in code: `node art/make-states.js` writes sprite strips and head an
 
 ## Treat jar (1.4.4)
 
-A small honey jar appears 2–3 times a day between 09:00 and 21:00 while you are active. Drag one of its three treats onto Bobee: he munches, does a happy reaction and gains happiness. Missed drops return to the jar. The jar fades after the last treat or five minutes unattended; Pause, idle, lock, sleep and display changes close its windows.
+A small honey jar appears 2–3 times a day between 09:00 and 21:00 while you are active and Bobee is visible. Drag one of its three treats onto Bobee: he munches, does a happy reaction and gains happiness. Missed drops return to the jar. The jar fades after the last treat or 45 seconds unattended; Pause, idle, lock, sleep and display changes close its windows.
 
 The jar and treats use opaque pixels for mouse handling. Losing pointer capture or pressing a key during a drag returns the treat. A 30-second recovery limit clears a drag if both release paths fail. Treats are cookie, honey and berries, drawn in code using Bobee's palette. Small displays without room for a jar skip that showing.
 

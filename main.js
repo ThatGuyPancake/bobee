@@ -5,6 +5,7 @@ const { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, protocol, 
 const { presenceFrom } = require('./lib/presence');
 const { resolveSafePath } = require('./lib/appPath');
 const { createStore } = require('./lib/store');
+const { restoreCompanion, restartIfUnresponsive } = require('./lib/resume');
 const { createJarWindows } = require('./lib/jarWindows');
 
 const SIZE = 200;
@@ -40,6 +41,8 @@ let idleTimer = null;
 let hook = null;
 let tray = null; // module-level reference so the Tray is not garbage collected
 let paused = false;
+let companionSeenAt = 0;
+let recoveryTimer = null;
 let jars = null;
 let jarTimer = null;
 let debugJarTimer = null;
@@ -118,6 +121,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: false,
     },
   });
   fx = win.getBounds().x;
@@ -132,6 +136,11 @@ function createWindow() {
 
 function registerIpc() {
   const trusted = (e) => !!win && !win.isDestroyed() && e.sender === win.webContents;
+  ipcMain.on('companion-visible', (e, visible) => {
+    if (!trusted(e)) return;
+    companionSeenAt = visible === true ? Date.now() : 0;
+    if (!visible) jars?.close();
+  });
   ipcMain.on('jar-grab', e => jars?.grab(e.sender));
   ipcMain.on('jar-release', (e, cancel) => jars?.release(e.sender, cancel === true));
   ipcMain.on('jar-click-through', (e, on) => jars?.clickThrough(e.sender, on === true));
@@ -303,14 +312,24 @@ if (gotLock) app.whenReady().then(() => {
     })() : null,
     getState: () => store.get(), patchState: p => store.patch(p),
     send: (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); },
-    active: () => !paused && presence === 'active' && presenceFrom(powerMonitor.getSystemIdleTime()) === 'active',
+    active: () => !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && Date.now() - companionSeenAt < 3000 && !paused && presence === 'active' && presenceFrom(powerMonitor.getSystemIdleTime()) === 'active',
   });
   jarTimer = setInterval(() => jars.check(), 60000);
   jars.check();
   if (!app.isPackaged && process.env.BOBEE_JAR_NOW === '1') debugJarTimer = setTimeout(() => jars.show(), 5000);
   powerMonitor.on('suspend', () => jars.close());
   powerMonitor.on('lock-screen', () => jars.close());
-  powerMonitor.on('resume', () => { jars.close(); sendCommand('system-resume'); });
+  const recoverDesktop = () => {
+    jars.close();
+    companionSeenAt = 0;
+    const resumedAt = Date.now();
+    clearTimeout(recoveryTimer);
+    recoveryTimer = setTimeout(() => restartIfUnresponsive(win, companionSeenAt, resumedAt, paused), 5000);
+    presence = presenceFrom(powerMonitor.getSystemIdleTime());
+    restoreCompanion({win, paused, place: dropToFloor, bounds: sendBounds, send: sendCommand});
+  };
+  powerMonitor.on('resume', recoverDesktop);
+  powerMonitor.on('unlock-screen', recoverDesktop);
   startHook();
   initAutostart();
   createTray();
@@ -330,6 +349,7 @@ if (gotLock) app.whenReady().then(() => {
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => { jars?.close(false); });
 app.on('will-quit', () => {
+  clearTimeout(recoveryTimer);
   clearInterval(jarTimer);
   clearTimeout(debugJarTimer);
   if (idleTimer) clearInterval(idleTimer);

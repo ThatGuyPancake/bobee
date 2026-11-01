@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { DEFAULT_MESSAGES, EXTRA_GROUPS, parseMessages, createPicker } from '../renderer/messages.js';
 
 describe('parseMessages', () => {
@@ -31,6 +32,19 @@ describe('parseMessages', () => {
 });
 
 describe('createPicker', () => {
+  it('nextClick skips immediate repeats, including duplicate message entries', () => {
+    const draws = [0, 0, 0.4, 0.9, 0.9, 0];
+    let i = 0;
+    const p = createPicker({ click: [['hi'], ['hi'], ['boop']] }, () => {
+      if (i >= draws.length) throw new Error('picker did not find a different click');
+      return draws[i++];
+    });
+    expect([p.nextClick(), p.nextClick(), p.nextClick()]).toEqual([['hi'], ['boop'], ['hi']]);
+  });
+  it('nextClick handles a pool with only one distinct message', () => {
+    const p = createPicker({ click: [['hi'], ['hi']] }, () => 0);
+    expect([p.nextClick(), p.nextClick()]).toEqual([['hi'], ['hi']]);
+  });
   it('never repeats consecutively within a group', () => {
     const p = createPicker({ sweet: [['a'], ['b'], ['c']], click: [['x'], ['y']] });
     let last = null;
@@ -51,6 +65,16 @@ describe('createPicker', () => {
     for (let i = 0; i < 3000; i++) n[p.nextRandom()[0][0]]++;
     for (const k of ['s', 'j', 'f']) expect(n[k]).toBeGreaterThan(800);
   });
+});
+
+it('ships at least 35 distinct short one-bubble click responses', () => {
+  const messages = parseMessages(readFileSync(new URL('../messages.json', import.meta.url), 'utf8'));
+  expect(new Set(messages.click.map((item) => item[0])).size).toBeGreaterThanOrEqual(35);
+  for (const item of messages.click) {
+    expect(item).toHaveLength(1);
+    expect(item[0].trim().length).toBeGreaterThan(0);
+    expect(item[0].length).toBeLessThanOrEqual(60);
+  }
 });
 
 describe('extra groups (rhythm, treats, holidays)', () => {
