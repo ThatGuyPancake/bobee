@@ -96,11 +96,16 @@ it('keeps every outfit prop inside every anchored animation frame', async () => 
   const props = JSON.parse(fs.readFileSync('assets/props/props.json'));
   for(const [name, {pivot}] of Object.entries(props)) {
     const p = PNG.sync.read(fs.readFileSync('assets/props/'+name+'.png'));
+    // Every opaque pixel is inside a frame iff its tight bounding box is inside.
+    // Compute it once per prop instead of repeating four assertions for each pixel/pose.
+    let minX=96,minY=96,maxX=-1,maxY=-1;
+    for(let y=0;y<96;y++) for(let x=0;x<96;x++) if(p.data[(y*96+x)*4+3]) {
+      minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+    }
+    expect(maxX,name+' has visible pixels').toBeGreaterThanOrEqual(0);
     for(const points of Object.values(anchors)) for(const [ax,ay] of points) {
-      for(let y=0;y<96;y++) for(let x=0;x<96;x++) if(p.data[(y*96+x)*4+3]) {
-        expect(x+ax-pivot[0],name).toBeGreaterThanOrEqual(0); expect(x+ax-pivot[0],name).toBeLessThan(96);
-        expect(y+ay-pivot[1],name).toBeGreaterThanOrEqual(0); expect(y+ay-pivot[1],name).toBeLessThan(96);
-      }
+      expect(minX+ax-pivot[0],name).toBeGreaterThanOrEqual(0); expect(maxX+ax-pivot[0],name).toBeLessThan(96);
+      expect(minY+ay-pivot[1],name).toBeGreaterThanOrEqual(0); expect(maxY+ay-pivot[1],name).toBeLessThan(96);
     }
   }
 });

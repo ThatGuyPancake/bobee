@@ -7,6 +7,8 @@ import { createPetting, petMoment } from './petting.js';
 import { createTreatReaction } from './treats.js';
 import { visitReaction } from './rhythm.js';
 import { createMood, phaseOf } from './mood.js';
+import { createSnack } from './snack.js';
+import { createBoard } from './board.js';
 import { outfitFor, createOutfitLayer } from './outfits.js';
 
 // strips with lettering (the sleep Zs), which must not be mirrored
@@ -26,6 +28,7 @@ async function main() {
   const canvas = document.getElementById('bobee');
   const bubbleEl = document.getElementById('bubble');
   const wrap = document.getElementById('sprite-wrap');
+  let board = null;
   let paused = false; // Pause in the tray hides him completely
 
   // The clock. In dev builds BOBEE_DATE sets a pretend start time, which then
@@ -38,6 +41,7 @@ async function main() {
   const now = () => (useDebug ? new Date(debugStart.getTime() + (performance.now() - debugAt)) : new Date());
 
   const savedState = await window.bobee.getState();
+  paused = savedState.paused;
   const mood = createMood(savedState, Date.now());
   let lastSavedMood = savedState.happiness;
   function saveMood() {
@@ -103,7 +107,7 @@ async function main() {
   const motion = createMotion({ size: canvas.offsetHeight || 96, reduced: reducedQuery.matches });
   reducedQuery.addEventListener('change', (q) => motion.setReduced(q.matches));
 
-  const bubble = createBubble(bubbleEl, { onResize: (h) => window.bobee.setHeight(h) });
+  const bubble = createBubble(bubbleEl, { onResize: h => window.bobee.setHeight(board?.active() ? 230 : h) });
 
   const b0 = await window.bobee.getBounds();
   let x = b0.x; // window x
@@ -117,6 +121,31 @@ async function main() {
     sipMs: player.durationOf('sip', 1),
     yawnMs: player.durationOf('yawn', 1),
     peekMs: player.durationOf('sleep-peek', 1),
+  });
+
+  brain.setPreferences(savedState);
+  brain.setPaused(paused);
+  wrap.classList.toggle('away', paused && !board?.active());
+  board = createBoard(document.getElementById('board'), id => window.bobee.drawingDone(id), {
+    announce: text => bubble.showMessage({ text, persistent: true }),
+    reduced: () => reducedQuery.matches,
+    phaseChanged: phase => {
+      wrap.dataset.delivery = phase;
+      if (phase === 'revealing') stopTalking();
+      canvas.style.cursor = phase === 'waiting' ? 'pointer' : '';
+      canvas.setAttribute('aria-label', phase === 'waiting' ? 'Bobee has a delivery. Click to reveal it.' : 'Bobee');
+    },
+  });
+  window.bobee.onDrawing(drawing => {
+    treats.cancel(); snack.cancel(); stopTalking();
+    if (drawing && pressed) brain.pointerUp();
+    pressed = false; moved = false; grab = null; lastMove = null;
+    visitToken++; pendingGreeting = null; skipFirstRandom = false;
+    board.show(drawing);
+    wrap.classList.toggle('away', paused && !board.active());
+    wrap.classList.remove('home-away');
+    window.bobee.setHeight(drawing ? 230 : 200);
+    if (drawing) setThrough(false);
   });
 
   // morning, day, night...: checked once a minute
@@ -175,13 +204,20 @@ async function main() {
     wake: () => brain.wakeHere(), moment: (name, ms) => brain.moment(name, ms),
     say: group => say(picker.next(group)), addMood: () => addMood('treat'),
   });
-  window.bobee.onJar(({ event }) => {
-    if (paused) return;
+  let systemIdle = 0;
+  const snack = createSnack({ walk: target => brain.walkTo(Math.min(bounds.maxX, Math.max(bounds.minX, target))), eat: () => window.bobee.snackEat(),
+    moment: () => { brain.moment('mopey', 3000); window.bobee.snackStart(); }, cancel: () => brain.endSnack(),
+  });
+  window.bobee.onJar(({ event, x: target }) => {
+    if (event === 'gone' || event === 'empty' || event === 'cancel-snack') snack.cancel();
+    if (event === 'appear') snack.jar(Math.min(bounds.maxX, Math.max(bounds.minX, target)));
+    if (paused || board.active()) return;
     if (event === 'appear' && !['home', 'sleep'].includes(lastState)) say(picker.next('treat'));
     if (event === 'empty') treats.empty();
   });
   window.bobee.onTreatEaten(() => {
-    if (paused) return;
+    snack.cancel();
+    if (paused || board.active()) return;
     visitToken++; pendingGreeting = null; skipFirstRandom = false;
     treats.eat(performance.now());
   });
@@ -200,14 +236,18 @@ async function main() {
     brain.setX(x);
   }
 
-  window.bobee.onKeyPulse(() => brain.keyPulse());
-  window.bobee.onIdle((s) => brain.setSystemIdle(s));
+  window.bobee.onKeyPulse(() => { if (!board.active()) brain.keyPulse(); });
+  window.bobee.onIdle((s) => { systemIdle = s; brain.setSystemIdle(s); if (s >= 120) snack.cancel(); });
   window.bobee.onBounds(async (b) => {
     bounds = { minX: b.minX, maxX: b.maxX };
     brain.setBounds(b.minX, b.maxX);
     await syncX();
   });
-  window.bobee.onCommand((c) => {
+  window.bobee.onCommand(async (c) => {
+    if (c === 'preferences') {
+      const state = await window.bobee.getState();
+      snack.cancel(); brain.setPreferences(state); return;
+    }
     if (c === 'outfits-on' || c === 'outfits-off') {
       outfitsEnabled = c === 'outfits-on';
       updateOutfits(true);
@@ -216,18 +256,19 @@ async function main() {
         skipFirstRandom = false;
       }
     } else if (c === 'system-resume') {
-      wrap.classList.toggle('away', paused);
+      wrap.classList.toggle('away', paused && !board?.active());
       syncX().catch(console.error);
       treats.cancel();
       visitToken++;
       pendingGreeting = null;
       skipFirstRandom = false;
+      snack.cancel();
       pressed = false;
       moved = false;
       grab = null;
       lastMove = null;
       petting.reset();
-      stopTalking();
+      if (board.phase() !== 'waiting') stopTalking();
       brain.resumeFromSleep();
       updatePhase();
       updateOutfits(true);
@@ -235,21 +276,21 @@ async function main() {
       // Refresh daily fields now; visit-start also reads a fresh store snapshot.
       window.bobee.getState().catch((e) => console.error('[bobee] resume state', e));
     } else if (c === 'pause') {
-      paused = true;
+      paused = true; snack.cancel();
       treats.cancel();
       visitToken++;
       pendingGreeting = null;
       skipFirstRandom = false;
-      wrap.classList.add('away');
-      stopTalking();
-      setThrough(true);
+      wrap.classList.toggle('away', !board.active());
+      if (board.phase() !== 'waiting') stopTalking();
+      setThrough(!board.active());
       brain.setPaused(true); // he's put to bed at home while hidden
     } else if (c === 'resume') {
       paused = false;
       wrap.classList.remove('away');
       brain.setPaused(false);
       if (lastState !== 'home') brain.setX(bounds.maxX);
-    } else if (c === 'say' && !paused) {
+    } else if (c === 'say' && !paused && !board.active()) {
       brain.summon(); // wakes him for a short visit if he's asleep
       say(randomLine());
     }
@@ -270,7 +311,8 @@ async function main() {
   };
 
   function opaqueAt(e) {
-    if (paused) return false;
+    if (board.active()) return true;
+    if (paused || wrap.classList.contains('home-away')) return false;
     if (bubble.visible() && bubbleEl.contains(e.target)) return true;
     // the wrapper, not the canvas: the canvas's own motion transform would
     // shift its box around as he squashes and tilts
@@ -279,6 +321,7 @@ async function main() {
   }
 
   window.addEventListener('mousemove', (e) => {
+    if (board.active()) { setThrough(false); return; }
     if (pressed) {
       const isDrag = brain.pointerMove(e.screenX, e.screenY);
       if (isDrag && grab) {
@@ -304,7 +347,13 @@ async function main() {
   });
 
   canvas.addEventListener('mousedown', async (e) => {
+    if (board.active()) {
+      const r = wrap.getBoundingClientRect();
+      if (e.button === 0 && player.isOpaqueAt(e.clientX - r.left, e.clientY - r.top)) board.reveal();
+      return;
+    }
     if (e.button !== 0 || !opaqueAt(e)) return;
+    snack.cancel();
     pressed = true;
     brain.pointerDown(e.screenX, e.screenY);
     const sx = e.screenX;
@@ -339,8 +388,13 @@ async function main() {
   function frame(now) {
     const dt = Math.min(now - last, 100);
     last = now;
-    treats.tick(now);
-    const out = brain.tick(dt);
+    if (!board.active()) treats.tick(now);
+    snack.tick(dt, !paused && !board.active() && systemIdle < 120 && !['home', 'sleep', 'homing', 'dozing'].includes(lastState), x);
+    const deliveryAnimation = board.phase() === 'revealing' ? 'delivery-reach' : board.phase() === 'stowing' ? 'delivery-away' : board.phase() === 'showing' ? 'delivery-hold' : 'wave';
+    const out = board.active() ? { state: 'presenting', animation: deliveryAnimation, facing: 'right', dx: 0, x, visible: true } : brain.tick(dt);
+    wrap.classList.toggle('home-away', !board.active() && !paused && !out.visible);
+    wrap.classList.toggle('away', paused && !board.active());
+    if (!board.active() && (paused || !out.visible)) setThrough(true);
     // The window follows Bobee; he always stays on screen.
     if (!pressed && !syncing) {
       const winX = Math.min(bounds.maxX, Math.max(bounds.minX, out.x));
@@ -364,6 +418,7 @@ async function main() {
       if (greeting.munch) brain.moment('munch', player.durationOf('munch', 2));
       say(picker.next(greeting.group));
     }
+    if (snack.phase() === 'grumpy' && out.animation === 'walk') out.animation = 'grumpy';
     player.play(out.animation);
     // the sleep Zs are lettering, so don't mirror him while he yawns and sleeps
     player.setFacing(NO_MIRROR.has(out.animation) ? 'right' : out.facing);
@@ -375,7 +430,7 @@ async function main() {
     if (!lastVisibilityAt || now - lastVisibilityAt >= 1000) {
       const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
       const drawn = pixels.some((value, index) => index % 4 === 3 && value > 0);
-      window.bobee.reportVisible(drawn && !paused && !document.hidden && !wrap.classList.contains('away'));
+      window.bobee.reportVisible(drawn && (!paused || board.active()) && !document.hidden && !wrap.classList.contains('away') && !wrap.classList.contains('home-away'));
       lastVisibilityAt = now;
     }
     const m = motion.update(now, { animation: out.animation, dx: out.dx, dragging: out.state === 'drag' });
@@ -386,6 +441,7 @@ async function main() {
     }
     requestAnimationFrame(frame);
   }
+  window.bobee.ready();
   requestAnimationFrame(frame);
 }
 

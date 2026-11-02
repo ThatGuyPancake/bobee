@@ -12,12 +12,14 @@ export const VISIT_JITTER_MS = 2 * 60 * 1000;
 
 // One hour's visits as { start, dur } in ms into the hour. withHello starts
 // the first one right away; durFactor scales every visit (evening: 0.7).
-export function makePlan(random, withHello, durFactor = 1) {
+export function makePlan(random, withHello, durFactor = 1, activeMinutes = 10) {
+  if (activeMinutes === 0) return [];
+  const scale = activeMinutes / 10;
   const rand = (a, b) => a + random() * (b - a);
   const slot = HOUR_MS / VISITS_PER_HOUR;
   const out = [];
   for (let i = 0; i < VISITS_PER_HOUR; i++) {
-    const dur = rand(VISIT_MIN_MS, VISIT_MAX_MS) * durFactor;
+    const dur = rand(VISIT_MIN_MS, VISIT_MAX_MS) * durFactor * scale;
     const start = withHello && i === 0 ? 0 : i * slot + rand(0, VISIT_JITTER_MS);
     out.push({ start, dur });
   }

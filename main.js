@@ -2,13 +2,18 @@
 const fs = require('node:fs');
 const { createUpdates } = require('./lib/updates');
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, protocol, screen, Tray } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, protocol, safeStorage, screen, Tray, Notification } = require('electron');
 const { presenceFrom } = require('./lib/presence');
 const { resolveSafePath } = require('./lib/appPath');
 const { createStore } = require('./lib/store');
 const { restoreCompanion, restartIfUnresponsive } = require('./lib/resume');
 const { createJarWindows } = require('./lib/jarWindows');
 
+const { createBreaks } = require('./lib/breaks');
+const { createInbox } = require('./lib/linkInbox');
+const { createReceiver } = require('./lib/linkReceiver');
+const { createCredentials, linkRequest, normalizeLinkUrl } = require('./lib/linkCredentials');
+const crypto = require('node:crypto');
 const SIZE = 200;
 // How far Bobee's window sinks past the work area, so he sits on the taskbar.
 const SINK = 4;
@@ -34,6 +39,7 @@ protocol.registerSchemesAsPrivileged([
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
+if (process.platform === 'win32') app.setAppUserModelId('com.bobee.companion');
 
 let win = null;
 let fx = 0; // float x, so sub-pixel dx accumulates
@@ -48,6 +54,10 @@ let recoveryTimer = null;
 let jars = null;
 let jarTimer = null;
 let debugJarTimer = null;
+let settingsWin = null, receiver = null, credentials = null, linkConfig = null;
+let linkTimer = null, linkCode = null, linkError = null, screenLocked = false, suspended = false, rendererReady = false, pairingBusy = false;
+const breaks = createBreaks();
+let lastIdlePoll = Date.now();
 let store = null; // saved state (bobee-state.json), created once the app is ready
 
 const num = (...vals) => vals.every((v) => typeof v === 'number' && Number.isFinite(v));
@@ -103,7 +113,7 @@ function dropToFloor() {
 }
 
 function createWindow() {
-  homeDisplayId = screen.getPrimaryDisplay().id;
+  homeDisplayId = store.get().displayId ?? screen.getPrimaryDisplay().id;
   const wa = workArea();
   win = new BrowserWindow({
     width: SIZE,
@@ -133,16 +143,28 @@ function createWindow() {
   win.setIgnoreMouseEvents(true, { forward: true });
   win.once('ready-to-show', () => win.showInactive());
   win.on('closed', () => { win = null; });
+  win.webContents.on('did-start-loading', () => { rendererReady = false; receiver?.defer(true); });
+  win.webContents.on('render-process-gone', () => { rendererReady = false; receiver?.defer(true); });
   win.loadURL('bobee://app/renderer/index.html');
 }
 
 function registerIpc() {
   const trusted = (e) => !!win && !win.isDestroyed() && e.sender === win.webContents;
+  ipcMain.on('renderer-ready', e => {
+    if (!trusted(e)) return;
+    rendererReady = true; receiver?.defer(screenLocked || suspended);
+  });
+  ipcMain.on('drawing-done', (e, id) => {
+    if (!trusted(e) || typeof id !== 'string') return;
+    try { if (receiver?.finish(id)) receiver.poll(); } catch (error) { linkError = error.message; }
+  });
   ipcMain.on('companion-visible', (e, visible) => {
     if (!trusted(e)) return;
     companionSeenAt = visible === true ? Date.now() : 0;
     if (!visible) jars?.close();
   });
+  ipcMain.on('snack-start', e => { if (trusted(e)) jars?.startSelfFeed(); });
+  ipcMain.on('snack-eat', e => { if (trusted(e)) jars?.selfFeed(); });
   ipcMain.on('jar-grab', e => jars?.grab(e.sender));
   ipcMain.on('jar-release', (e, cancel) => jars?.release(e.sender, cancel === true));
   ipcMain.on('jar-click-through', (e, on) => jars?.clickThrough(e.sender, on === true));
@@ -161,6 +183,8 @@ function registerIpc() {
     if (!trusted(e)) return;
     // sent after a drag: the screen he was dropped on becomes home
     homeDisplayId = screen.getDisplayMatching(win.getBounds()).id;
+    store.patch({ displayId: homeDisplayId }); store.flush();
+    tray?.setContextMenu(buildTrayMenu());
     dropToFloor();
   });
   ipcMain.on('set-height', (e, h) => {
@@ -200,6 +224,12 @@ function startIdlePoll() {
     presence = presenceFrom(secs);
     if (presence !== 'active') jars?.close();
     if (win && !win.isDestroyed()) win.webContents.send('idle', secs);
+    const now = Date.now();
+    if (breaks.tick(Math.min(10000, now - lastIdlePoll), !screenLocked && !suspended && secs < 120, store.get().breakMinutes)) {
+      const notification = new Notification({ title: 'Bobee says: time for a stretch', body: 'Take a little break. Snooze 10 minutes or skip from the Bobee tray menu.' });
+      notification.show(); tray?.setContextMenu(buildTrayMenu());
+    }
+    lastIdlePoll = now;
   }, 10000);
 }
 
@@ -221,6 +251,75 @@ function startHook() {
 
 function sendCommand(cmd) {
   if (win && !win.isDestroyed()) win.webContents.send('command', cmd);
+}
+
+function changePreferences(patch) {
+  store.patch(patch); store.flush();
+  sendCommand('preferences');
+  tray?.setContextMenu(buildTrayMenu());
+}
+
+function openLinkSettings() {
+  if (settingsWin && !settingsWin.isDestroyed()) { settingsWin.focus(); return; }
+  settingsWin = new BrowserWindow({ width: 560, height: 650, autoHideMenuBar: true, webPreferences: {
+    preload: path.join(__dirname, 'preload-settings.js'), contextIsolation: true, nodeIntegration: false, sandbox: true,
+  } });
+  settingsWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  settingsWin.webContents.on('will-navigate', e => e.preventDefault());
+  settingsWin.on('closed', () => { settingsWin = null; });
+  settingsWin.loadURL('bobee://app/renderer/settings.html');
+}
+
+function startLink() {
+  clearInterval(linkTimer);
+  receiver?.defer(true); receiver = null;
+  if (!linkConfig) return;
+  try {
+    const config = { ...linkConfig }; // in-flight requests always belong to this receiver
+    const inboxFile = 'bobee-inbox-' + crypto.createHash('sha256').update(config.token).digest('hex').slice(0, 16) + '.json';
+    receiver = createReceiver({ inbox: createInbox(path.join(app.getPath('userData'), inboxFile)),
+      request: async (route, body) => { const result = await linkRequest(config, route, body); linkError = null; return result; },
+      show: drawing => {
+        if (!win || win.isDestroyed()) return;
+        if (drawing) { jars?.close(); win.showInactive(); }
+        win.webContents.send('drawing', drawing);
+      },
+      error: error => { linkError = error.message; },
+    });
+    receiver.defer(!rendererReady || screenLocked || suspended);
+    const poll = () => { if (!suspended) receiver?.poll().catch(error => { linkError = error.message; }); };
+    linkTimer = setInterval(poll, 15000); poll();
+  } catch (error) { linkError = 'Inbox could not be opened: ' + error.message; }
+}
+
+function registerLinkIpc() {
+  const trusted = e => settingsWin && !settingsWin.isDestroyed() && e.sender === settingsWin.webContents;
+  ipcMain.handle('link-status', e => trusted(e) ? { connected: !!linkConfig, url: linkConfig?.url, code: linkCode && linkCode.expires > Date.now() ? linkCode.value : null, error: linkError } : {});
+  ipcMain.handle('link-pair', async (e, url, key) => {
+    if (!trusted(e) || pairingBusy) return { error: 'Connection is busy' };
+    pairingBusy = true;
+    try {
+      if (linkConfig) throw Error('Disconnect the current pairing before connecting again');
+      if (!safeStorage.isEncryptionAvailable()) throw Error('Windows credential encryption unavailable');
+      if (typeof key !== 'string' || !key.length || key.length > 256 || typeof url !== 'string') throw Error('Enter website and enrollment key');
+      const origin = normalizeLinkUrl(url, !app.isPackaged);
+      const result = await linkRequest({ url: origin, token: key }, '/api/receiver', {});
+      if (!/^[a-f0-9]{64}$/.test(result.receiverToken) || !/^[a-f0-9]{32}$/.test(result.code)) throw Error('Invalid pairing response');
+      const config = { url: origin, token: result.receiverToken };
+      credentials.save(config); linkConfig = config;
+      linkCode = { value: result.code, expires: Date.now() + 600000 }; linkError = null;
+      startLink(); return { connected: true };
+    } catch (error) { return { error: error.message }; } finally { pairingBusy = false; }
+  });
+  ipcMain.handle('link-revoke', async e => {
+    if (!trusted(e) || pairingBusy) return { error: 'Connection is busy' };
+    pairingBusy = true;
+    try {
+      if (linkConfig) await linkRequest(linkConfig, '/api/revoke', {});
+      credentials.clear(); linkConfig = null; linkCode = null; linkError = null; startLink();
+      return { connected: false };
+    } catch (error) { return { error: error.message }; } finally { pairingBusy = false; }
+  });
 }
 
 function initAutostart() {
@@ -252,11 +351,25 @@ function buildTrayMenu() {
       label: paused ? 'Resume' : 'Pause',
       click: () => {
         paused = !paused;
+        store.patch({ paused }); store.flush();
         if (paused) jars?.close();
         sendCommand(paused ? 'pause' : 'resume');
         tray.setContextMenu(buildTrayMenu());
       },
     },
+    { label: 'Active minutes per hour', submenu: [0, 5, 10, 15, 30, 60].map(minutes => ({
+      label: minutes === 0 ? 'Off' : minutes === 60 ? 'Always' : String(minutes) + ' minutes', type: 'radio', checked: store.get().activeMinutes === minutes,
+      click: () => changePreferences({ activeMinutes: minutes }),
+    })) },
+    { label: 'Between visits', submenu: [{ label: 'Go home', value: 'home' }, { label: 'Sleep at work', value: 'sleep' }].map(item => ({ label: item.label, type: 'radio', checked: store.get().restMode === item.value, click: () => changePreferences({ restMode: item.value }) })) },
+    { label: 'Screen', submenu: screen.getAllDisplays().map((display, i) => ({ label: display.label || 'Screen ' + (i + 1), type: 'radio', checked: homeDisplay().id === display.id, click: () => {
+      homeDisplayId = display.id; changePreferences({ displayId: display.id }); jars?.close(); dropToFloor(); sendBounds();
+    } })) },
+    { label: 'Quiet hours (21:00–07:30)', type: 'checkbox', checked: store.get().quietHours, click: item => changePreferences({ quietHours: item.checked }) },
+    { label: 'Break reminders', submenu: [0, 25, 50, 60, 90].map(minutes => ({ label: minutes ? 'After ' + minutes + ' active minutes' : 'Off', type: 'radio', checked: store.get().breakMinutes === minutes, click: () => { breaks.skip(); changePreferences({ breakMinutes: minutes }); } })) },
+    { label: 'Snooze break 10 minutes', enabled: breaks.pending(), click: () => { breaks.snooze(); tray.setContextMenu(buildTrayMenu()); } },
+    { label: 'Skip this break', enabled: breaks.pending(), click: () => { breaks.skip(); tray.setContextMenu(buildTrayMenu()); } },
+    { label: 'Bobee Link…', click: openLinkSettings },
     { label: 'Say something', click: () => sendCommand('say') },
     {
       label: 'Outfits',
@@ -306,9 +419,15 @@ if (gotLock) app.whenReady().then(() => {
     }
   });
   store = createStore(path.join(app.getPath('userData'), 'bobee-state.json'));
+  paused = store.get().paused;
+  credentials = createCredentials(path.join(app.getPath('userData'), 'bobee-link-credentials'), safeStorage);
+  linkConfig = credentials.load();
+  screenLocked = powerMonitor.getSystemIdleState(120) === 'locked';
   registerIpc();
+  registerLinkIpc();
   createWindow();
   startIdlePoll();
+  startLink();
   jars = createJarWindows({
     BrowserWindow, screen, base: __dirname, getArea: workArea,
     getBobee: () => win && !win.isDestroyed() ? (() => {
@@ -318,13 +437,13 @@ if (gotLock) app.whenReady().then(() => {
     })() : null,
     getState: () => store.get(), patchState: p => store.patch(p),
     send: (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); },
-    active: () => !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && Date.now() - companionSeenAt < 3000 && !paused && presence === 'active' && presenceFrom(powerMonitor.getSystemIdleTime()) === 'active',
+    active: () => !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && Date.now() - companionSeenAt < 3000 && !paused && !receiver?.active() && presence === 'active' && presenceFrom(powerMonitor.getSystemIdleTime()) === 'active',
   });
   jarTimer = setInterval(() => jars.check(), 60000);
   jars.check();
   if (!app.isPackaged && process.env.BOBEE_JAR_NOW === '1') debugJarTimer = setTimeout(() => jars.show(), 5000);
-  powerMonitor.on('suspend', () => jars.close());
-  powerMonitor.on('lock-screen', () => jars.close());
+  powerMonitor.on('suspend', () => { suspended = true; receiver?.defer(true); jars.close(); });
+  powerMonitor.on('lock-screen', () => { screenLocked = true; receiver?.defer(true); jars.close(); });
   const recoverDesktop = () => {
     jars.close();
     companionSeenAt = 0;
@@ -334,8 +453,8 @@ if (gotLock) app.whenReady().then(() => {
     presence = presenceFrom(powerMonitor.getSystemIdleTime());
     restoreCompanion({win, paused, place: dropToFloor, bounds: sendBounds, send: sendCommand});
   };
-  powerMonitor.on('resume', recoverDesktop);
-  powerMonitor.on('unlock-screen', recoverDesktop);
+  powerMonitor.on('resume', () => { suspended = false; recoverDesktop(); receiver?.defer(screenLocked || !rendererReady); receiver?.poll(); });
+  powerMonitor.on('unlock-screen', () => { screenLocked = false; recoverDesktop(); receiver?.defer(suspended || !rendererReady); receiver?.poll(); });
   startHook();
   initAutostart();
   createTray();
@@ -352,6 +471,7 @@ if (gotLock) app.whenReady().then(() => {
     fx = win.getBounds().x;
     dropToFloor();
     sendBounds();
+    tray?.setContextMenu(buildTrayMenu());
   };
   screen.on('display-metrics-changed', onMetrics);
   screen.on('display-removed', onMetrics);
@@ -364,6 +484,7 @@ app.on('will-quit', () => {
   updates?.dispose();
   clearTimeout(recoveryTimer);
   clearInterval(jarTimer);
+  clearInterval(linkTimer);
   clearTimeout(debugJarTimer);
   if (idleTimer) clearInterval(idleTimer);
   if (store) store.flush();

@@ -133,6 +133,14 @@ The jar and treats use opaque pixels for mouse handling. Losing pointer capture 
 
 Daily showing counts are saved locally in `bobee-state.json`; no network service is used. For development only, `BOBEE_JAR_NOW=1 npm start` shows a jar five seconds after launch. Packaged builds ignore this flag.
 
+## Desktop preferences and Bobee Link (1.6.0)
+
+The tray now saves active minutes per hour (Off, 5, 10, 15, 30 or Always), **Go home** (walk away/hide between visits) or **Sleep at work**, preferred screen, Pause and optional quiet hours (21:00–07:30). A missing preferred screen falls back to the primary display and returns when that screen reconnects. Optional break reminders count active PC time and have tray actions to snooze 10 active minutes or skip.
+
+Leave a jar beside an awake Bobee for 30 attended seconds and he briefly looks mopey, walks grumpily to take one treat, then perks up. Feeding him yourself cancels that routine. It creates no absence penalties or saved hunger.
+
+**Bobee Link…** pairs an upload/preview/send website on your Cloudflare account. Every received drawing is durably queued. Bobee announces a delivery, waits for a click, pulls out the smaller picture frame and puts it away afterwards. Deliveries interrupt Pause, Go home, quiet hours and the normal hourly budget. The current selected settings apply again when the queue empties. Locked/suspended/disconnected apps defer delivery. The website confirms when her Bobee receives and finishes displaying the picture. See [Link setup and protocol](link/README.md) for hosting, pairing, limits and checks.
+
 ## Updates (1.5.0+)
 Installed Bobee checks GitHub Releases 15 seconds after startup and every four hours. Stable updates download quietly. The tray shows progress, errors/retry, and **Update ready — restart Bobee**. Only clicking that action installs an update; closing Bobee normally does not. **Check for updates** checks immediately. Offline failures leave Bobee running. Settings and happiness remain in the existing user-data folder. Development runs never check the feed.
 

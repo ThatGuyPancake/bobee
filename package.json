@@ -1,10 +1,11 @@
 {
   "name": "bobee",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "",
   "main": "main.js",
   "scripts": {
     "test": "vitest run",
+    "test:desktop": "electron scripts/smoke-desktop.cjs",
     "start": "electron .",
     "placeholders": "node scripts/make-placeholders.js",
     "dist": "electron-builder --win --publish never"
@@ -37,7 +38,8 @@
       "renderer/**",
       "assets/**",
       "messages.json",
-      "preload-jar.js"
+      "preload-jar.js",
+      "preload-settings.js"
     ],
     "asarUnpack": [
       "node_modules/uiohook-napi/**/*.node"

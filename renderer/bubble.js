@@ -21,7 +21,7 @@ export function createBubble(rootEl, { onResize = () => {} } = {}) {
   }
 
   return {
-    showMessage({ text, image, from } = {}) {
+    showMessage({ text, image, from, persistent = false } = {}) {
       clearTimeout(hideTimer);
       clearTimeout(fadeTimer);
       fadeTimer = null;
@@ -49,7 +49,7 @@ export function createBubble(rootEl, { onResize = () => {} } = {}) {
       }
       // Next frame so the opacity transition runs.
       requestAnimationFrame(() => rootEl.classList.add('show'));
-      hideTimer = setTimeout(hide, SHOW_MS);
+      hideTimer = persistent ? null : setTimeout(hide, SHOW_MS);
     },
     visible() {
       return isVisible;

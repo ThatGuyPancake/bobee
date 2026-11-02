@@ -3,8 +3,8 @@ export const FRAME = 64;
 // scale that fits: 96px art at 1x, 64px placeholders at 1x.
 export const CANVAS = 96;
 
-export const NAMES = ['idle', 'walk', 'sleep', 'drag', 'happy', 'wave', 'sip', 'yawn', 'pet', 'sleep-pet', 'sleep-peek', 'munch'];
-export const DEFAULT_FPS = { idle: 4, walk: 9, sleep: 2, drag: 8, happy: 9, wave: 8, sip: 5, yawn: 5, pet: 7, 'sleep-pet': 4, 'sleep-peek': 4, munch: 8 };
+export const NAMES = ['idle', 'walk', 'sleep', 'drag', 'happy', 'wave', 'sip', 'yawn', 'pet', 'sleep-pet', 'sleep-peek', 'munch', 'mopey', 'grumpy', 'delivery-reach', 'delivery-hold', 'delivery-away'];
+export const DEFAULT_FPS = { idle: 4, walk: 9, sleep: 2, drag: 8, happy: 9, wave: 8, sip: 5, yawn: 5, pet: 7, 'sleep-pet': 4, 'sleep-peek': 4, munch: 8, mopey: 3, grumpy: 7, 'delivery-reach': 8, 'delivery-hold': 3, 'delivery-away': 8 };
 const OVERRIDE_FPS = 6;
 
 // Frames are square: the strip's height is the frame size.

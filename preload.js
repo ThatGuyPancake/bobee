@@ -9,6 +9,11 @@ function listen(channel, cb) {
 }
 
 contextBridge.exposeInMainWorld('bobee', {
+  snackStart: () => ipcRenderer.send('snack-start'),
+  snackEat: () => ipcRenderer.send('snack-eat'),
+  ready: () => ipcRenderer.send('renderer-ready'),
+  drawingDone: id => ipcRenderer.send('drawing-done', id),
+  onDrawing: cb => listen('drawing', cb),
   reportVisible: (visible) => ipcRenderer.send('companion-visible', !!visible),
   moveBy: (dx, dy) => ipcRenderer.send('move-by', dx, dy),
   moveTo: (x, y) => ipcRenderer.send('move-to', x, y),

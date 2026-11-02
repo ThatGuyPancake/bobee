@@ -23,6 +23,18 @@ it('cancels capture loss without consuming and recovers for another drag',()=>{
 it('closes all windows and timers immediately on pause/display/exit cancellation',()=>{
  const s=setup();s.control.show();s.control.grab(made[0].webContents);s.control.close();vi.advanceTimersByTime(400000);expect(made.every(w=>w.dead)).toBe(true);expect(vi.getTimerCount()).toBe(0);
 });
+it('self-feeds once only after attended delay and arrival, and cancels on manual feeding',()=>{
+ let bobee={x:1720,y:880,width:96,height:96};
+ const s=setup({getBobee:()=>bobee});s.control.show();
+ s.control.startSelfFeed();expect(s.control.selfFeed()).toBe(false);
+ vi.advanceTimersByTime(30000);s.control.startSelfFeed();expect(s.control.selfFeed()).toBe(false);
+ bobee={...bobee,x:made[0].getBounds().x+24-48};
+ expect(s.control.selfFeed()).toBe(true);expect(s.control.selfFeed()).toBe(false);
+ expect(s.events.filter(([n])=>n==='treat-eaten')).toHaveLength(1);s.control.close();
+ const t=setup({getBobee:()=>bobee});t.control.show();vi.advanceTimersByTime(30000);t.control.startSelfFeed();
+ t.control.grab(made.at(-1).webContents);expect(t.events.some(([n,p])=>n==='jar'&&p.event==='cancel-snack')).toBe(true);
+ expect(t.control.selfFeed()).toBe(false);t.control.close();
+});
 it('expires unattended jars but never interrupts a held treat',()=>{
  const s=setup();s.control.show();vi.advanceTimersByTime(40000);s.control.grab(made[0].webContents);vi.advanceTimersByTime(6000);expect(made[0].dead).not.toBe(true);s.control.release(made[0].webContents,true);vi.advanceTimersByTime(1400);expect(made[0].dead).toBe(true);s.control.close();
 });

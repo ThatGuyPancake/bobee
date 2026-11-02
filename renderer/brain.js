@@ -48,6 +48,9 @@ export function createBrain({
   peekMs = 0, // at night a click only makes him peek with one eye
   visits = true,
 } = {}) {
+  let preferences = { activeMinutes: 10, restMode: 'corner', quietHours: true };
+  let preferencesApplied = false, snacking = false;
+  const budget = () => preferences.activeMinutes * 60000;
   let lo = minX;
   let hi = Math.max(minX, maxX);
   let px = Math.min(hi, Math.max(lo, x));
@@ -133,6 +136,7 @@ export function createBrain({
       startDozing();
       return;
     }
+    if (preferences.restMode === 'sleep') { startDozing(); return; }
     target = hi;
     facing = target > px ? 'right' : 'left';
     state = 'homing';
@@ -201,8 +205,8 @@ export function createBrain({
 
   // A planned visit: he wakes where he is, yawns, then waves hello.
   function startVisit(dur) {
-    const left = VISIT_BUDGET_MS - awakeUsed;
-    if (left < VISIT_MIN_MS) return;
+    const left = budget() - awakeUsed;
+    if (left <= 0) return;
     sleepMoment = null;
     beginVisit(Math.min(dur * (phase === 'evening' ? EVENING_FACTOR : 1), left));
     timedState = null;
@@ -250,7 +254,7 @@ export function createBrain({
     px = hi;
     target = hi;
     state = 'home';
-    plan = makePlan(random, false);
+    plan = makePlan(random, false, 1, preferences.activeMinutes);
   }
 
   function tickVisits(dt, screenIdle) {
@@ -266,7 +270,7 @@ export function createBrain({
     if (!asleep) awakeUsed += dt;
 
     const due = planIdx < plan.length && hourClock >= plan[planIdx].start;
-    if (due && phase === 'night') {
+    if (due && phase === 'night' && preferences.quietHours) {
       planIdx++; // no visits at night
       return;
     }
@@ -292,7 +296,7 @@ export function createBrain({
       }
     } else if (due) {
       // a visit came due while he was awake anyway: make it a visit
-      beginVisit(Math.min(plan[planIdx++].dur * (phase === 'evening' ? EVENING_FACTOR : 1), Math.max(0, VISIT_BUDGET_MS - awakeUsed)));
+      beginVisit(Math.min(plan[planIdx++].dur * (phase === 'evening' ? EVENING_FACTOR : 1), Math.max(0, budget() - awakeUsed)));
     } else {
       awakeLeft -= dt;
       if (awakeLeft <= 0 && state !== timedState) goHome();
@@ -321,18 +325,26 @@ export function createBrain({
           if (hourClock >= HOUR_MS) {
             hourClock -= HOUR_MS;
             awakeUsed = 0;
-            plan = makePlan(random, false);
+            plan = makePlan(random, false, 1, preferences.activeMinutes);
             planIdx = 0;
           }
         }
 
-        if (visits) tickVisits(dt, screenIdle);
+        const forcedRest = preferencesApplied && (preferences.activeMinutes === 0 || (preferences.quietHours && phase === 'night'));
+        if (snacking && screenIdle) { snacking = false; goHome(); }
+        if (snacking) { /* snack walk owns movement briefly */ } else if (visits && forcedRest) {
+          if (!ASLEEP.has(state) && !SETTLING.has(state)) { endVisit(); goHome(); }
+        } else if (visits && preferences.activeMinutes === 60 && !screenIdle) {
+          if (ASLEEP.has(state) || SETTLING.has(state)) enterIdle();
+        } else if (visits) tickVisits(dt, screenIdle);
         else if (ASLEEP.has(state) || state === 'dozing') {
           if (!screenIdle) enterIdle(); // without visits he wakes when you come back
         } else if (screenIdle) startDozing();
 
         if (state !== 'walk' && state !== 'homing') moveState = null;
-        if (state === 'idle') {
+        if (state === 'idle' && snacking) {
+          // Wait beside the jar until the main process consumes the treat.
+        } else if (state === 'idle') {
           stateTimer -= dt;
           if (stateTimer <= 0) {
             const r = random();
@@ -408,14 +420,14 @@ export function createBrain({
         facing,
         dx,
         x: px,
-        visible: true, // he never leaves the screen; Pause hides the window instead
+        visible: !(preferences.restMode === 'home' && state === 'home'),
         event: events.length ? events.shift() : null,
         bubble: bubbles.length ? bubbles.shift() : null,
       };
     },
 
     keyPulse() {
-      if (paused || state === 'drag') return;
+      if (paused || snacking || state === 'drag') return;
       wake();
       if (QUIET.has(state)) return; // asleep or settling: typing doesn't wake him
       if (clock - lastPulseAt >= TYPING_END_MS) pulses = 0;
@@ -505,7 +517,29 @@ export function createBrain({
       hourClock = 0;
       awakeUsed = 0;
       planIdx = 0;
-      plan = makePlan(random, false);
+      plan = makePlan(random, false, 1, preferences.activeMinutes);
+    },
+
+    walkTo(x) {
+      if (paused || state === 'drag') return;
+      snacking = true; target = clamp(x); timedState = null; sleepMoment = null;
+      facing = target > px ? 'right' : 'left'; state = 'walk';
+    },
+    endSnack() { snacking = false; },
+    setPreferences(p) {
+      preferencesApplied = true;
+      const old = preferences.activeMinutes;
+      const previousRest = preferences.restMode;
+      preferences = { ...preferences, ...p };
+      if (previousRest !== preferences.restMode && (ASLEEP.has(state) || SETTLING.has(state))) {
+        if (preferences.restMode === 'home') goHome();
+        else if (preferences.restMode === 'sleep') startDozing();
+      }
+      if (preferences.activeMinutes !== old) {
+        plan = makePlan(random, false, 1, preferences.activeMinutes).filter(v => v.start >= hourClock);
+        planIdx = 0;
+        if (onVisit) visitLeft = Math.min(visitLeft, Math.max(0, budget() - awakeUsed));
+      }
     },
 
     setMood(level) {
@@ -546,6 +580,7 @@ export function createBrain({
     // Resume shows him asleep in the corner.
     setPaused(p) {
       paused = !!p;
+      if (paused) snacking = false;
       if (!paused) return;
       bubbles.length = 0;
       pendingRandom = false;

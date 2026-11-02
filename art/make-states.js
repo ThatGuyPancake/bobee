@@ -610,6 +610,37 @@ S.munch = [
   return place(b);
 });
 
+// Short snack expressions, redrawn in the master's palette on existing poses.
+function snackFace(frame, grumpy) {
+  const f = frame.clone(); f.anchor = [...frame.anchor];
+  const ox = f.anchor[0] - 48, oy = f.anchor[1] - 15;
+  eyes(f, 'sleepy', oy, ox); clearMouth(f, oy, ox);
+  paint(f, [[44,50],[45,49],[46,49],[47,48],[48,48],[49,48],[50,49],[51,49],[52,50]], C.out, ox, oy);
+  const brow = grumpy ? [[33,36],[34,36],[35,37],[36,37],[37,38],[58,38],[59,37],[60,37],[61,36],[62,36]] : [[33,37],[34,36],[35,35],[36,35],[37,34],[58,34],[59,35],[60,35],[61,36],[62,37]];
+  paint(f, brow, C.out, ox, oy); return f;
+}
+S.mopey = S.idle.slice(0, 2).map(f => snackFace(f, false));
+S.grumpy = S.walk.map(f => snackFace(f, true));
+
+// Put the mug aside and reach behind his shoulder, then lift both paws to the frame.
+S['delivery-reach'] = [[66,72],[71,70],[76,64],[78,57],[77,44],[76,30],[75,20],[75,18]].map(([x,y], i) => {
+  const b = plainTorso(removeSteam(canvas()));
+  arm(b, 63, 68, x, y, 4.3); paw(b, x, y, 4.7);
+  const leftY = i < 4 ? 70 : [52,36,22,18][i-4];
+  arm(b, 32, 68, 22, leftY, 4.3); paw(b, 22, leftY, 4.7);
+  if (i >= 5) eyes(b, 'happy');
+  return place(b);
+});
+S['delivery-hold'] = [0,1,0,0].map((dy,i) => {
+  const b = plainTorso(removeSteam(canvas()));
+  arm(b, 32, 68, 22, 18 + dy, 4.3); paw(b, 22, 18 + dy, 4.7);
+  arm(b, 64, 68, 75, 18 + dy, 4.3); paw(b, 75, 18 + dy, 4.7);
+  eyes(b, i === 2 ? 'closed' : 'happy');
+  return place(b);
+});
+// The same hand positions lower the frame back behind his shoulder.
+S['delivery-away'] = [...S['delivery-reach']].reverse();
+
 // ---------- write ----------
 function strip(name, frames) {
   const s = new Img(F * frames.length, F);
